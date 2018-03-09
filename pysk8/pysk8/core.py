@@ -31,6 +31,7 @@ bglogger = logging.getLogger('bgapi')
 bglogger.setLevel(logging.WARN)
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARN)
 
 class ScanResult(object):
     """An individual result from a BLE scan process for a particular device
@@ -374,6 +375,19 @@ class SK8(object):
 
     def set_sample_rate(self, new_rate):
         pass # TODO
+
+    def get_received_packets(self):
+        """Returns number of received data packets.
+
+        Returns:
+            int. Number of sensor data packets received either since the connection
+            was established, or since :meth:`reset_received_packets` was called.
+        """
+        return self.packets
+
+    def reset_received_packets(self):
+        """Reset counter tracking received data packets to zero"""
+        self.packets = 0
 
     def get_firmware_version(self, cached=True):
         """Returns the SK8 device firmware version.
@@ -1013,11 +1027,11 @@ class Dongle(BlueGigaCallbacks):
     def _enable_imu_streaming(self, dev, imu_state, sensor_state):
         logger.debug('setting IMU state = {:02X} on device {}'.format(imu_state, dev.addr))
 
-        self.write_attribute(dev.conn_handle, HANDLE_IMU_SELECTION, struct.pack('B', imu_state))
+        self._write_attribute(dev.conn_handle, HANDLE_IMU_SELECTION, struct.pack('B', imu_state))
     
         time.sleep(0.1)
 
-        self.write_attribute(dev.conn_handle, HANDLE_SENSOR_SELECTION, struct.pack('B', sensor_state))
+        self._write_attribute(dev.conn_handle, HANDLE_SENSOR_SELECTION, struct.pack('B', sensor_state))
 
         logger.debug('Completed configuring IMUs on device {}'.format(dev.addr))
 
