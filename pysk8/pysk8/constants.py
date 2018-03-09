@@ -10,7 +10,7 @@ import struct
 
 DATA_STRUCT                              = struct.Struct('<hhhhhhhhhBB')
 MAX_IMUS                                 = 5
-DEF_TIMEOUT                              = 2.0
+DEF_TIMEOUT                              = 3
 
 SENSOR_ACC                               = 0x01
 SENSOR_GYRO                              = 0x02
