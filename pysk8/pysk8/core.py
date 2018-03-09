@@ -600,15 +600,14 @@ class Dongle(BlueGigaCallbacks):
                 (will be terminated early if all devices in `devnames` are discovered)
 
         Returns:
-            False if one or more of the requested devices could not be found. Otherwise
-            returns the same results as :meth:`connect`.
+            Returns the same results as :meth:`connect`.
         """
         responses = self.scan_devices(devnames, timeout)
 
         for dev in devnames:
             if dev not in responses:
                 logger.error('Failed to find device {} during scan'.format(dev))
-                return False
+                return (False, [])
 
         return self.connect([responses.get_device(dev) for dev in devnames], calibration)
 
