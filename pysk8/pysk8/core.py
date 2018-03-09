@@ -443,7 +443,7 @@ class SK8(object):
         return self.imus[imu_number]
 
     def _update_sensors(self, acc, gyro, mag, imu, seq, timestamp):
-        self.imus[imu].update(acc, gyro, mag, seq, timestamp)
+        self.imus[imu]._update(acc, gyro, mag, seq, timestamp)
 
     # def _add_characteristic(self, atthandle, value):
     #     for s in self.services.values():
