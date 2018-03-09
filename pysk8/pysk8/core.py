@@ -802,12 +802,20 @@ class Dongle(BlueGigaCallbacks):
             connection was created successfully. If `result` is True, `device` will
             be set to a new :class:`SK8` instance. Otherwise it will be None.
         """
-        logger.debug('Connecting directly to device address'.format(device_addr))
+
+        # convert string address into a ScanResult if needed
+        if isinstance(device, str):
+            device = ScanResult(device, fmt_addr_raw(device))
+        elif not isinstance(device, ScanResult):
+            logger.warn('Expected ScanResult, found type {} instead!'.format(type(device)))
+            return (False, None)
+
+        logger.debug('Connecting directly to device address'.format(device.addr))
         # TODO check number of active connections and fail if exceeds max
-        logger.info('Connecting to {}...'.format(device_addr))
         self._set_state(self._STATE_CONNECTING)
-        raw_addr = fmt_addr_raw(device_addr)
-        self.api.ble_cmd_gap_connect_direct(raw_addr, 0, 6, 14, 100, 5)
+
+        # TODO parameters here = ???
+        self.api.ble_cmd_gap_connect_direct(device.raw_addr, 0, 6, 14, 100, 5)
         self._wait_for_state(self._STATE_CONNECTING, 5)
 
         if self.state != self._STATE_CONNECTED:
@@ -820,9 +828,7 @@ class Dongle(BlueGigaCallbacks):
 
         conn_handle = self.conn_handles[-1]
         logger.info('Connection OK, handle is 0x{:02X}'.format(conn_handle))
-        # create an empty ScanResult to pass in here
-        sc = ScanResult(device_addr, raw_addr, None, None)
-        sk8 = SK8(self, conn_handle, sc, calibration)
+        sk8 = SK8(self, conn_handle, device, calibration)
         self._add_device(sk8)
 
         return (True, sk8)
