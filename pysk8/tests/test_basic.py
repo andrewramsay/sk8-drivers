@@ -17,10 +17,6 @@ class BasicTests(unittest.TestCase):
         self.assertIsNotNone(port, 'find_dongle_port is None')
         self.assertEqual(port, self.config['dongle_port'], 'discovered port {} != defined port {}'.format(port, self.config['dongle_port']))
 
-    def test_dongle_creation(self):
-        with Dongle() as d:
-            pass
-
     # def test_dongle_init_with_reset(self):
     #     with Dongle() as d:
     #         self.assertEqual(True, d.init(self.config['dongle_port'], hard_reset=True), "Dongle init failed")
@@ -50,10 +46,10 @@ class BasicTests(unittest.TestCase):
 
             temp_name = 'temp_name'
             self.assertEqual(True, device.set_device_name(temp_name), 'Failed to set device name')
-            self.assertEqual(temp_name, self.get_device_name(), 'Device name mismatch: {} vs expected {}'.format(self.get_device_name(), temp_name))
+            self.assertEqual(temp_name, device.get_device_name(), 'Device name mismatch: {} vs expected {}'.format(device.get_device_name(), temp_name))
             
             self.assertEqual(True, device.set_device_name(self.config['device_name']), 'Failed to set device name')
-            self.assertEqual(self.config['device_name'], self.get_device_name(), 'Device name mismatch: {} vs expected {}'.format(self.get_device_name(), self.config['device_name']))
+            self.assertEqual(self.config['device_name'], device.get_device_name(), 'Device name mismatch: {} vs expected {}'.format(device.get_device_name(), self.config['device_name']))
 
 
 if __name__ == "__main__":
