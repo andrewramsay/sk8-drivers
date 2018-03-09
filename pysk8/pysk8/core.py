@@ -213,7 +213,6 @@ class SK8(object):
         self.streaming = False
         self.packets = 0
         self.services = {}
-        self.calibration = calibration
         if calibration:
             logger.debug('Attempting to load calibration for addr={}'.format(self.addr))
             self.load_calibration()
@@ -222,13 +221,35 @@ class SK8(object):
         """Devices considered equal if address or name match"""
         return self.addr == v or self.name == v
 
-    def set_calibration(self, enabled):
-        """Set calibration state for IMU data.
+    def set_calibration(self, enabled, imus):
+        """Set calibration state for attached IMUs.
 
         Args:
-            enabled (bool): True to apply calibration to IMU data (if available). False to output uncalibrated data.
+            enabled (bool): True to apply calibration to IMU data (if available). 
+            False to output uncalibrated data.
+            imus (list): indicates which IMUs the calibration state should be set on. 
+            Empty list or [0, 1, 2, 3, 4] will apply to all IMUs, [0, 1] only to 
+            first 2 IMUs, etc. 
         """
-        self.calibration = enabled
+        if len(imus) == 0:
+            imus = list(range(MAX_IMUS))
+
+        for i in imus:
+            if i < 0 or i >= MAX_IMUS:
+                logger.warn('Invalid IMU index {} in set_calibration'.format(i))
+                continue
+            self.imus[i]._use_calibration = enabled
+
+    def get_calibration(self):
+        """Get calibration state for attached IMUs.
+
+        Returns:
+            list. A 5-element list of bools indicating if calibrated output is 
+            currently enabled or disabled on the IMU with the corresponding index.
+            Note that if calibration is enabled but no calibration file has been
+            loaded, uncalibrated data will still be output!
+        """
+        return [x._use_calibration for x in self.imus]
 
     def load_calibration(self, calibration_file=None):
         """Load calibration data for IMU(s) connected to this SK8.
@@ -256,7 +277,7 @@ class SK8(object):
             s = '{}_IMU{}'.format(self.name, i)
             if s in calibration_data.sections():
                 logger.debug('Calibration data for device {} was detected, extracting...'.format(s))
-                success = success or self.imus[i].load_calibration(calibration_data[s])
+                success = success or self.imus[i]._load_calibration(calibration_data[s])
 
         return success
 
