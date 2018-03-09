@@ -3,7 +3,8 @@
 This module contains the core classes for interacting with SK8 Bluetooth Low
 Energy sensor packs. Currently supported is limited to Windows/OSX/Linux desktop
 platforms, and requires a Silicon Labs BLED112 USB dongle. A link to a webpage 
-more information about this dongle can be found `here <https://www.silabs.com/products/wireless/bluetooth/bluetooth-low-energy-modules/bled112-bluetooth-smart-dongle>`_.
+with more information about this dongle can be found 
+`here <https://www.silabs.com/products/wireless/bluetooth/bluetooth-low-energy-modules/bled112-bluetooth-smart-dongle>`_.
 
 """
 
@@ -25,8 +26,8 @@ from pysk8.util import pp_hex, fmt_addr, fmt_addr_raw
 from pysk8.constants import *
 from pysk8.imu import IMUData
 
+# bgapi is pretty verbose and usually won't need to see most of what it produces
 bglogger = logging.getLogger('bgapi')
-# bgapi is pretty verbose and usually won't need to see most of it
 bglogger.setLevel(logging.WARN)
 
 logger = logging.getLogger(__name__)
@@ -668,7 +669,7 @@ class Dongle(BlueGigaCallbacks):
         return self.scan_responses
 
     # synchronous scan
-    def scan_devices(self, devnames, timeout=DEF_TIMEOUT, interval=DEF_SCAN_INTERVAL, window=DEF_TIMEOUT):
+    def scan_devices(self, devnames, timeout=DEF_TIMEOUT, interval=DEF_SCAN_INTERVAL, window=DEF_SCAN_WINDOW):
         """Run a BLE scan for a defined interval and return results.
         
         Alternative to :meth:`begin_scan/:meth:`end_scan`. 
