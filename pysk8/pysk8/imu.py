@@ -1,16 +1,24 @@
 
 class IMUData(object):
+    """Instances of this class provide access to sensor data from individual IMUs.
+
+    Attributes:
+        acc (list): latest accelerometer readings, [x, y, z]
+        mag (list): latest magnetometer readings, [x, y, z]
+        acc (list): latest gyroscope readings, [x, y, z]
+        seq (int): sequence number from most recent packet (0-255 range)
+    """
 
     def __init__(self, calibration=True, calibration_data=None):
         self.acc = [0, 0, 0]
         self.mag = [0, 0, 0]
         self.gyro = [0, 0, 0]
         self.seq = 0
-        self.use_calibration = False
+        self._use_calibration = False
         self.has_acc_calib, self.has_mag_calib, self.has_gyro_calib = False, False, False
-        self.load_calibration(calibration_data)
+        self._load_calibration(calibration_data)
 
-    def load_calibration(self, calibration_data):
+    def _load_calibration(self, calibration_data):
         axes = ['x', 'y', 'z']
         if calibration_data is None:
             return False
@@ -37,7 +45,7 @@ class IMUData(object):
             self.mag_offsets = None
             self.mag_scale = None
 
-        self.use_calibration = True
+        self._use_calibration = True
         return True
 
     def _get_cal(self, raw, offset, scale=None):
@@ -47,8 +55,8 @@ class IMUData(object):
             return raw
         return [(raw[x] * scale[x]) - offset[x] for x in range(len(raw))]
 
-    def update(self, acc, gyro, mag, seq, timestamp):
-        if not self.use_calibration:
+    def _update(self, acc, gyro, mag, seq, timestamp):
+        if not self._use_calibration:
             self.acc = acc
             self.gyro = gyro
             self.mag = mag
