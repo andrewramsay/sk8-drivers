@@ -213,6 +213,8 @@ class SK8(object):
         self.streaming = False
         self.packets = 0
         self.services = {}
+        self.imu_callback = None
+        self.imu_callback_data = None
         if calibration:
             logger.debug('Attempting to load calibration for addr={}'.format(self.addr))
             self.load_calibration()
@@ -298,6 +300,28 @@ class SK8(object):
             self.packets = 0
 
         return result
+
+    def set_imu_callback(self, callback, data=None):
+        """Register a callback for incoming data packets.
+        
+        This method allows you to pass in a callbable which will be called on
+        receipt of each IMU data packet sent by this SK8 device. Set to `None`
+        to disable it again.
+
+        Args:
+            callback: a callable with the following signature:
+                        (acc, gyro, mag, imu_index, seq, timestamp, data)
+                      where:
+                        acc, gyro, mag = sensor data ([x,y,z] in each case)
+                        imu_index = originating IMU number (int, 0-4)
+                        seq = packet sequence number (int, 0-255)
+                        timestamp = value of time.time() when packet received
+                        data = value of `data` parameter passed to this method
+            data: an optional arbitrary object that will be passed as a 
+                parameter to the callback
+        """
+        self.imu_callback = callback
+        self.imu_callback_data = data
 
     def enable_imu_streaming(self, enabled_imus, enabled_sensors=SENSOR_ALL):
         """Configures and enables IMU sensor data streaming.
@@ -444,6 +468,9 @@ class SK8(object):
 
     def _update_sensors(self, acc, gyro, mag, imu, seq, timestamp):
         self.imus[imu]._update(acc, gyro, mag, seq, timestamp)
+        # call the registered IMU callback if any
+        if self.imu_callback is not None:
+            self.imu_callback(acc, gyro, mag, imu, seq, timestamp, self.imu_callback_data)
 
     # def _add_characteristic(self, atthandle, value):
     #     for s in self.services.values():
