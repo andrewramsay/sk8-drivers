@@ -43,6 +43,6 @@ def namechange(port, device_name):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        sys.exit('Usage: python basic.py <serial port> <device name>')
+        sys.exit('Usage: python namechange.py <serial port> <device name>')
 
     namechange(sys.argv[1], sys.argv[2])
