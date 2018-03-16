@@ -1178,11 +1178,14 @@ class Dongle(BlueGigaCallbacks):
                 logger.debug('Connection disconnected (terminated by local host)')
             else:
                 logger.warn('Connection disconnected: {} - {}'.format(reason, RESULT_CODE[reason]))
-                logger.debug('Calling disconnect on device with handle {}'.format(connection))
-                self.conn_devices[connection].disconnect()
-                # this is probably an error, so call the handler if the user has set one
-                if self._disconnect_handler is not None:
-                    self._disconnect_handler(self, self.conn_devices[connection], reason, RESULT_CODE[reason])
+                if connection in self.conn_devices:
+                    logger.debug('Calling disconnect on device with handle {}'.format(connection))
+                    self.conn_devices[connection].disconnect()
+                    # this is probably an error, so call the handler if the user has set one
+                    if self._disconnect_handler is not None:
+                        self._disconnect_handler(self, self.conn_devices[connection], reason, RESULT_CODE[reason])
+                else:
+                    logger.warn('Disconnected orphaned connection {}'.format(connection))
 
     def ble_evt_connection_status(self, connection, flags, address, address_type, conn_interval, timeout, latency, bonding):
         super(Dongle, self).ble_evt_connection_status(connection, flags, address, address_type, conn_interval, timeout, latency, bonding)
