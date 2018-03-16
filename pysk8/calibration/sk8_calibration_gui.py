@@ -340,15 +340,15 @@ class SK8Calibration(QMainWindow, Ui_MainWindow):
 
         # assumes 2g range
         data = self.calibration_data[self.current_imuid]
-        accx_pos = sum([x[0] for x in acc_samples[0]]) / len(acc_samples[0])
-        accx_neg = sum([x[0] for x in acc_samples[1]]) / len(acc_samples[1])
-        accy_pos = sum([y[1] for y in acc_samples[2]]) / len(acc_samples[2])
-        accy_neg = sum([y[1] for y in acc_samples[3]]) / len(acc_samples[3])
-        accz_pos = sum([z[2] for z in acc_samples[4]]) / len(acc_samples[4])
-        accz_neg = sum([z[2] for z in acc_samples[5]]) / len(acc_samples[5])
-        data[self.ACCX_SCALE] = str(2000 / (accx_pos - accx_neg))
-        data[self.ACCY_SCALE] = str(2000 / (accy_pos - accy_neg))
-        data[self.ACCZ_SCALE] = str(2000 / (accz_pos - accz_neg))
+        accx_pos = sum([x[0] for x in acc_samples[0]]) / float(len(acc_samples[0]))
+        accx_neg = sum([x[0] for x in acc_samples[1]]) / float(len(acc_samples[1]))
+        accy_pos = sum([y[1] for y in acc_samples[2]]) / float(len(acc_samples[2]))
+        accy_neg = sum([y[1] for y in acc_samples[3]]) / float(len(acc_samples[3]))
+        accz_pos = sum([z[2] for z in acc_samples[4]]) / float(len(acc_samples[4]))
+        accz_neg = sum([z[2] for z in acc_samples[5]]) / float(len(acc_samples[5]))
+        data[self.ACCX_SCALE] = str(2000.0 / (accx_pos - accx_neg))
+        data[self.ACCY_SCALE] = str(2000.0 / (accy_pos - accy_neg))
+        data[self.ACCZ_SCALE] = str(2000.0 / (accz_pos - accz_neg))
 
         data[self.ACCX_OFFSET] = str(int((accx_pos + accx_neg) / 2.0))
         data[self.ACCY_OFFSET] = str(int((accy_pos + accy_neg) / 2.0))
