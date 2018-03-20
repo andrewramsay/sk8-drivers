@@ -7,6 +7,7 @@ class IMUData(object):
         mag (list): latest magnetometer readings, [x, y, z]
         acc (list): latest gyroscope readings, [x, y, z]
         seq (int): sequence number from most recent packet (0-255 range)
+        timestamp (float): value of `time.time()` when packet received
     """
 
     def __init__(self, calibration=True, calibration_data=None):
