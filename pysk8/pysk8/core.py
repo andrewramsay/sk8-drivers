@@ -25,6 +25,7 @@ from bgapi.cmd_def import gap_discoverable_mode, gap_connectable_mode, RESULT_CO
 from pysk8.util import pp_hex, fmt_addr, fmt_addr_raw
 from pysk8.constants import *
 from pysk8.imu import IMUData
+from pysk8.extana import ExtAnaData
 
 # bgapi is pretty verbose and usually won't need to see most of what it produces
 bglogger = logging.getLogger('bgapi')
@@ -209,12 +210,15 @@ class SK8(object):
         self.firmware_version = None
         self.conn_handle = conn_handle
         self.imus = [IMUData() for x in range(MAX_IMUS)]
+        self.extana_data = ExtAnaData()
         self.enabled_imus = []
         self.streaming = False
         self.packets = 0
         self.services = {}
         self.imu_callback = None
         self.imu_callback_data = None
+        self.extana_callback = None
+        self.extana_callback_data = None
         if calibration:
             logger.debug('Attempting to load calibration for addr={}'.format(self.addr))
             self.load_calibration()
@@ -301,8 +305,96 @@ class SK8(object):
 
         return result
 
+    def set_ana_callback(self, callback, data=None):
+        """Register a callback for incoming data packets from the SK8-ExtAna board.
+
+        This method allows you to pass in a callable which will be called on 
+        receipt of each packet sent from the SK8-ExtAna board. Set to `None` to
+        disable it again.
+
+        Args:
+            callback: a callable with the following signature:
+                        (ana1, ana2, temp, seq, timestamp, data)
+                      where:
+                        ana1, ana2 = current values of the two analogue inputs
+                        temp = temperature sensor reading
+                        seq = packet sequence number (int, 0-255)
+                        timestamp = value of time.time() when packet received
+                        data = value of `data` parameter passed to this method
+            data: an optional arbitrary object that will be passed as a 
+                parameter to the callback
+        """
+        self.extana_callback = callback
+        self.extana_callback_data = data
+
+    def enable_extana_streaming(self):
+        """Configures and enables IMU sensor data streaming.
+
+        NOTE: only one streaming mode can be active at any time, so e.g. if you 
+        want to stream IMU data, you must disable SK8-ExtAna streaming first.
+
+        Args:
+            enabled_imus (list): a list of distinct ints in the range `0`-`4`
+                inclusive identifying the IMU. `0` is the SK8 itself, and 
+                `1`-`4` are the subsidiary IMUs on the USB chain, starting
+                from the end closest to the SK8. 
+            enabled_sensors (int): to save battery, you can choose to enable some 
+                or all of the sensors on each enabled IMU. By default, the
+                accelerometer, magnetometer, and gyroscope are all enabled. Pass
+                a bitwise OR of one or more of :const:`SENSOR_ACC`, 
+                :const:`SENSOR_MAG`, and :const:`SENSOR_GYRO` to gain finer
+                control over the active sensors.
+
+        Returns:
+            bool. True if successful, False if an error occurred.
+        """
+        if not self.dongle._enable_extana_streaming(self):
+            logger.warn('Failed to enable SK8-ExtAna streaming!')
+            return False
+
+        return True
+
+    def disable_extana_streaming(self):
+        """Disable SK8-ExtAna streaming for this device.
+
+        Returns:
+            True on success, False if an error occurred.
+        """
+        return self.dongle._disable_extana_streaming(self)
+
+    def get_extana_led(self):
+        """Returns the current (R, G, B) colour of the SK8-ExtAna LED.
+
+        Returns:
+            a 3-tuple (r, g, b) (all unsigned integers) in the range 0-3000, or `None` on error.
+        """
+        rgb = self.dongle._read_attribute(self.conn_handle, HANDLE_EXTANA_LED, israw=True)
+        if rgb is None:
+            return rgb
+
+        return struct.unpack('<HHH', rgb)
+        
+    def set_extana_led(self, r, g, b):
+        """Update the colour of the RGB LED on the SK8-ExtAna board.
+
+        Args:
+            r (int): red channel, 0-255
+            g (int): green channel, 0-255
+            b (int): blue channel, 0-255
+
+        Returns:
+            True on success, False if an error occurred.
+        """
+        if max([r, g, b]) > LED_MAX:
+            logger.warn('RGB channel values must be 0-{}'.format(LED_MAX))
+            return False
+
+        val = struct.pack('<HHH', r, g, b)
+        return self.dongle._write_attribute(self.conn_handle, HANDLE_EXTANA_LED, val)
+        
+
     def set_imu_callback(self, callback, data=None):
-        """Register a callback for incoming data packets.
+        """Register a callback for incoming IMU data packets.
         
         This method allows you to pass in a callbable which will be called on
         receipt of each IMU data packet sent by this SK8 device. Set to `None`
@@ -325,6 +417,9 @@ class SK8(object):
 
     def enable_imu_streaming(self, enabled_imus, enabled_sensors=SENSOR_ALL):
         """Configures and enables IMU sensor data streaming.
+
+        NOTE: only one streaming mode can be active at any time, so e.g. if you 
+        want to stream IMU data, you must disable SK8-ExtAna streaming first.
 
         Args:
             enabled_imus (list): a list of distinct ints in the range `0`-`4`
@@ -452,7 +547,7 @@ class SK8(object):
         return self.firmware_version
 
     def get_imu(self, imu_number):
-        """Returns an :class:`pysk8.imu.IMUData` object representing one of the attached IMUs.
+        """Returns a :class:`pysk8.imu.IMUData` object representing one of the attached IMUs.
 
         Args:
             imu_number (int): a value from 0-4 inclusive identifying the IMU. `0` is the
@@ -466,11 +561,25 @@ class SK8(object):
             return None
         return self.imus[imu_number]
 
+    def get_extana(self):
+        """Returns a :class:`pysk8.extana.ExtAnaData` object representing an attach SK8-ExtAna board.
+
+        Returns:
+            :class:`pysk8.extana.ExtAnaData` object.
+        """
+        return self.extana_data
+
     def _update_sensors(self, acc, gyro, mag, imu, seq, timestamp):
         self.imus[imu]._update(acc, gyro, mag, seq, timestamp)
         # call the registered IMU callback if any
         if self.imu_callback is not None:
             self.imu_callback(acc, gyro, mag, imu, seq, timestamp, self.imu_callback_data)
+
+    def _update_extana(self, ch1, ch2, temp, seq, timestamp):
+        self.extana_data._update(ch1, ch2, temp, seq, timestamp)
+        # call the registered ExtAna callback if any
+        if self.extana_callback is not None:
+            self.extana_callback(ch1, ch2, temp, seq, timestamp, self.extana_callback_data)
 
     # def _add_characteristic(self, atthandle, value):
     #     for s in self.services.values():
@@ -526,6 +635,7 @@ class Dongle(BlueGigaCallbacks):
     _STATE_WRITE_GATT        = 15
     _STATE_GAP_END           = 16
     _STATE_DONGLE_COMMAND    = 17
+    _STATE_CONFIGURE_ANA     = 18
 
     def __init__(self):
         """Create a :class:`Dongle` instance (without connecting to the physical device)"""
@@ -567,7 +677,10 @@ class Dongle(BlueGigaCallbacks):
                 logger.debug('Failed to init BlueGigaAPI: {}, attempt {}/{}'.format(e, i + 1, Dongle.PORT_RETRIES))
                 time.sleep(0.1)
 
-        time.sleep(0.5)
+        if self.api is None:
+            return False
+
+        time.sleep(0.5) # TODO
         self.get_supported_connections()
         logger.info('Dongle supports {} connections'.format(self.supported_connections))
         self.conn_state = {x: self._STATE_IDLE for x in range(self.supported_connections)}
@@ -1036,7 +1149,7 @@ class Dongle(BlueGigaCallbacks):
 
         logger.debug('_wait_for_conn_state: {:.2f}'.format(time.time() - t))
 
-    def _read_attribute(self, conn_handle, att_handle):
+    def _read_attribute(self, conn_handle, att_handle, israw=False):
         self.attr_read = {}
 
         self._set_conn_state(conn_handle, self._STATE_READ_GATT)
@@ -1050,6 +1163,9 @@ class Dongle(BlueGigaCallbacks):
         data = self.attr_read[conn_handle].get(att_handle, None)
         if data is None:
             return None
+
+        if israw:
+            return data
 
         return data.decode('ascii')
 
@@ -1097,16 +1213,32 @@ class Dongle(BlueGigaCallbacks):
             logger.debug('Failed to activate streaming on device {}!'.format(dev.addr))
             return False
 
-        logger.debug('Streaming activated OK on device {}'.format(dev.addr))
-
+        logger.debug('IMU streaming activated OK on device {}'.format(dev.addr))
         dev.imus_enabled = imu_state
+        return True
 
+    def _enable_extana_streaming(self, dev):
+        self._set_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
+        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, HANDLE_CCC_ANA, b'\x01\x00')
+        self._wait_for_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
+
+        if self.conn_state[dev.conn_handle] != self._STATE_STREAMING:
+            logger.debug('Failed to activate streaming on device {}!'.format(dev.addr))
+            return False
+
+        logger.debug('SK8-ExtAna streaming activated OK on device {}'.format(dev.addr))
         return True
 
     def _disable_imu_streaming(self, dev):
         self._set_conn_state(dev.conn_handle, self._STATE_CONFIGURE_IMUS)
         self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, HANDLE_CCC_IMU, b'\x00\x00')
         self._wait_for_conn_state(dev.conn_handle, self._STATE_CONFIGURE_IMUS)
+        return True
+
+    def _disable_extana_streaming(self, dev):
+        self._set_conn_state(dev.conn_handle, self._STATE_CONFIGURE_ANA)
+        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, HANDLE_CCC_ANA, b'\x00\x00')
+        self._wait_for_conn_state(dev.conn_handle, self._STATE_CONFIGURE_ANA)
         return True
 
     # responses
@@ -1289,8 +1421,13 @@ class Dongle(BlueGigaCallbacks):
             if connection in self.conn_devices:
                 timestamp = time.time()
                 device = self.conn_devices[connection]
-                data = DATA_STRUCT.unpack(value)
-                device._update_sensors(data[:3], data[3:6], data[6:9], data[9], data[10], timestamp)
+                # for now determine packet type based on length
+                if len(value) == IMU_DATA_STRUCT.size:
+                    data = IMU_DATA_STRUCT.unpack(value)
+                    device._update_sensors(data[:3], data[3:6], data[6:9], data[9], data[10], timestamp)
+                elif len(value) == ANA_DATA_STRUCT.size:
+                    data = ANA_DATA_STRUCT.unpack(value)
+                    device._update_extana(data[0], data[1], data[2], data[3], timestamp)
                 device.packets += 1
                 self.packets += 1
 
