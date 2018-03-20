@@ -8,9 +8,12 @@ Attributes:
 
 import struct
 
-DATA_STRUCT                              = struct.Struct('<hhhhhhhhhBB')
+IMU_DATA_STRUCT                          = struct.Struct('<hhhhhhhhhBB')
+ANA_DATA_STRUCT                          = struct.Struct('<HHHB')
 MAX_IMUS                                 = 5
 DEF_TIMEOUT                              = 3
+
+LED_MAX                                  = 3000
 
 SENSOR_ACC                               = 0x01
 SENSOR_GYRO                              = 0x02
@@ -21,14 +24,15 @@ SENSOR_ALL                               = SENSOR_ACC | SENSOR_GYRO | SENSOR_MAG
 # these handles may change when the firmware is modified significantly
 # for now, accessing things by handle avoids the need to do service/char discovery
 HANDLE_CCC_IMU                           = 0x000F 
-HANDLE_CCC_FSR                           = 0x0018
+HANDLE_CCC_ANA                           = 0x0012
 HANDLE_IMU_SELECTION                     = 0x0014
 HANDLE_SENSOR_SELECTION                  = 0x0016
 HANDLE_SOFT_RESET                        = 0x0018
+HANDLE_EXTANA_LED                        = 0x001A 
+
 HANDLE_DEVICE_NAME                       = 0x0007
-HANDLE_FIRMWARE_VERSION                  = 0x002D
 HANDLE_BATTERY_LEVEL                     = 0x001D
-HANDLE_SET_GYRO_BIAS                     = 0x001A
+HANDLE_FIRMWARE_VERSION                  = 0x002D
 
 # UUID_SK8_SERVICE                         = 'b9e32260107411e6a7d50002a5d5c51b'
 # UUID_IMU_CHAR                            = 'b9e32261107411e6a7d50002a5d5c51b'
