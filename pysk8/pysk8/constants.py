@@ -29,6 +29,7 @@ HANDLE_IMU_SELECTION                     = 0x0014
 HANDLE_SENSOR_SELECTION                  = 0x0016
 HANDLE_SOFT_RESET                        = 0x0018
 HANDLE_EXTANA_LED                        = 0x001A 
+HANDLE_PACKET_TIMING                     = 0x001C
 
 HANDLE_DEVICE_NAME                       = 0x0007
 HANDLE_BATTERY_LEVEL                     = 0x001D
