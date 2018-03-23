@@ -832,6 +832,9 @@ class Dongle(BlueGigaCallbacks):
         self._set_state(self._STATE_SCANNING)
         return True
 
+    def is_scanning(self):
+        return self.state == self._STATE_SCANNING
+
     def end_scan(self):
         """Ends an ongoing BLE scan started by :meth:`begin_scan`.
 
