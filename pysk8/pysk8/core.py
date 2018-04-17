@@ -305,7 +305,7 @@ class SK8(object):
 
         return result
 
-    def set_ana_callback(self, callback, data=None):
+    def set_extana_callback(self, callback, data=None):
         """Register a callback for incoming data packets from the SK8-ExtAna board.
 
         This method allows you to pass in a callable which will be called on 
