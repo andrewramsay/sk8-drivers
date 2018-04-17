@@ -327,28 +327,26 @@ class SK8(object):
         self.extana_callback = callback
         self.extana_callback_data = data
 
-    def enable_extana_streaming(self):
-        """Configures and enables IMU sensor data streaming.
+    def enable_extana_streaming(self, include_imu=False, enabled_sensors=SENSOR_ALL):
+        """Configures and enables sensor data streaming from the SK8-ExtAna device.
+
+        By default this will cause the SK8 to only stream data from the analog 
+        sensors on the SK8-ExtAna, but if `include_imu` is set to True, it will 
+        also send data from the internal IMU in the SK8. 
 
         NOTE: only one streaming mode can be active at any time, so e.g. if you 
-        want to stream IMU data, you must disable SK8-ExtAna streaming first.
+        want to stream IMU data normally, you must disable SK8-ExtAna streaming first. 
 
         Args:
-            enabled_imus (list): a list of distinct ints in the range `0`-`4`
-                inclusive identifying the IMU. `0` is the SK8 itself, and 
-                `1`-`4` are the subsidiary IMUs on the USB chain, starting
-                from the end closest to the SK8. 
-            enabled_sensors (int): to save battery, you can choose to enable some 
-                or all of the sensors on each enabled IMU. By default, the
-                accelerometer, magnetometer, and gyroscope are all enabled. Pass
-                a bitwise OR of one or more of :const:`SENSOR_ACC`, 
-                :const:`SENSOR_MAG`, and :const:`SENSOR_GYRO` to gain finer
-                control over the active sensors.
+            include_imu (bool): If False, only SK8-ExtAna packets will be streamed.
+                If True, the device will also stream data from the SK8's internal IMU. 
+            enabled_sensors (int): If `include_imu` is True, this can be used to 
+                select which IMU sensors will be active. 
 
         Returns:
             bool. True if successful, False if an error occurred.
         """
-        if not self.dongle._enable_extana_streaming(self):
+        if not self.dongle._enable_extana_streaming(self, include_imu, enabled_sensors):
             logger.warn('Failed to enable SK8-ExtAna streaming!')
             return False
 
@@ -366,13 +364,13 @@ class SK8(object):
         """Returns the current (R, G, B) colour of the SK8-ExtAna LED.
 
         Returns:
-            a 3-tuple (r, g, b) (all unsigned integers) in the range 0-3000, or `None` on error.
+            a 3-tuple (r, g, b) (all unsigned integers) in the range 0-255, or `None` on error.
         """
         rgb = self.dongle._read_attribute(self.conn_handle, HANDLE_EXTANA_LED, israw=True)
         if rgb is None:
             return rgb
 
-        return struct.unpack('<HHH', rgb)
+        return list(map(lambda x: int(x * (LED_MAX / INT_LED_MAX)), struct.unpack('<HHH', rgb)))
         
     def set_extana_led(self, r, g, b):
         """Update the colour of the RGB LED on the SK8-ExtAna board.
@@ -385,10 +383,12 @@ class SK8(object):
         Returns:
             True on success, False if an error occurred.
         """
-        if max([r, g, b]) > LED_MAX:
-            logger.warn('RGB channel values must be 0-{}'.format(LED_MAX))
+        if min([r, g, b]) < LED_MIN or max([r, g, b]) > LED_MAX:
+            logger.warn('RGB channel values must be {}-{}'.format(LED_MIN, LED_MAX))
             return False
 
+        # internally range is 0-3000
+        r, g, b = map(lambda x: int(x * (INT_LED_MAX / LED_MAX)), [r, g, b])
         val = struct.pack('<HHH', r, g, b)
         return self.dongle._write_attribute(self.conn_handle, HANDLE_EXTANA_LED, val)
         
@@ -933,7 +933,7 @@ class Dongle(BlueGigaCallbacks):
         for dev in devicelist:
             logger.info('Connecting to {} (name={})...'.format(dev.addr, dev.name))
             self._set_state(self._STATE_CONNECTING)
-            self.api.ble_cmd_gap_connect_direct(dev.raw_addr, 0, 6, 14, 100, 5)
+            self.api.ble_cmd_gap_connect_direct(dev.raw_addr, 0, 14, 20, 100, 5)
             self._wait_for_state(self._STATE_CONNECTING, 5)
 
             if self.state != self._STATE_CONNECTED:
@@ -1202,13 +1202,9 @@ class Dongle(BlueGigaCallbacks):
 
     def _enable_imu_streaming(self, dev, imu_state, sensor_state):
         logger.debug('setting IMU state = {:02X} on device {}'.format(imu_state, dev.addr))
-
         self._write_attribute(dev.conn_handle, HANDLE_IMU_SELECTION, struct.pack('B', imu_state))
-    
         time.sleep(0.1)
-
         self._write_attribute(dev.conn_handle, HANDLE_SENSOR_SELECTION, struct.pack('B', sensor_state))
-
         logger.debug('Completed configuring IMUs on device {}'.format(dev.addr))
 
         self._set_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
@@ -1223,7 +1219,22 @@ class Dongle(BlueGigaCallbacks):
         dev.imus_enabled = imu_state
         return True
 
-    def _enable_extana_streaming(self, dev):
+    def _enable_extana_streaming(self, dev, include_imu, enabled_sensors):
+        # if we want to stream internal IMU data too, set that up first
+        if include_imu:
+            # set up IMU state before activating streaming
+            imu_state = 0x01
+            logger.debug('setting IMU state = {:02X} on device {}'.format(imu_state, dev.addr))
+            self._write_attribute(dev.conn_handle, HANDLE_IMU_SELECTION, struct.pack('B', imu_state))
+            time.sleep(0.1)
+            self._write_attribute(dev.conn_handle, HANDLE_SENSOR_SELECTION, struct.pack('B', enabled_sensors))
+            logger.debug('Completed configuring IMUs on device {}'.format(dev.addr))
+
+        # write to the char that will actually enable the sending of IMU packets
+        # while ExtAna streaming is active
+        self._write_attribute(dev.conn_handle, HANDLE_EXTANA_IMU_STREAMING, struct.pack('B', 1 if include_imu else 0))
+
+        # enable ExtAna streaming
         self._set_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
         self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, HANDLE_CCC_ANA, b'\x01\x00')
         self._wait_for_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
