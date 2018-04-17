@@ -27,7 +27,7 @@ def extana(port, device_name):
         sk8 = devices[0]
 
         # Enable ExtAna streaming
-        if not sk8.enable_extana_streaming():
+        if not sk8.enable_extana_streaming(True):
             sys.exit('Failed to enable streaming!')
 
         start_time, last_time = time.time(), time.time()
@@ -42,29 +42,30 @@ def extana(port, device_name):
                     last_time = time.time()
 
                 data = sk8.get_extana()
-                print('ch1={}, ch2={}, temp={:.1f}C'.format(data.ch1, data.ch2, (data.temp / 100)))
+                print(data)
+                print(sk8.get_imu(0))
                 time.sleep(0.5) 
 
                 if c == 0:
                     print('RED')
-                    sk8.set_extana_led(3000, 0, 0)
+                    sk8.set_extana_led(255, 0, 0)
                     print(sk8.get_extana_led())
                 elif c == 1:
                     print('GREEN')
-                    sk8.set_extana_led(0, 3000, 0)
+                    sk8.set_extana_led(0, 255, 0)
                     print(sk8.get_extana_led())
                 elif c == 2:
                     print('BLUE')
-                    sk8.set_extana_led(0, 0, 3000)
+                    sk8.set_extana_led(0, 0, 255)
                     print(sk8.get_extana_led())
                 elif c == 3:
-                    sk8.set_extana_led(3000, 0, 3000)
+                    sk8.set_extana_led(255, 0, 255)
                     print(sk8.get_extana_led())
                 elif c == 4:
-                    sk8.set_extana_led(0, 3000, 3000)
+                    sk8.set_extana_led(0, 255, 255)
                     print(sk8.get_extana_led())
                 elif c == 5:
-                    sk8.set_extana_led(3000, 3000, 0)
+                    sk8.set_extana_led(255, 255, 0)
                     print(sk8.get_extana_led())
                 c = (c + 1) % 6
             except KeyboardInterrupt:
