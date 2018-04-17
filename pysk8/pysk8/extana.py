@@ -19,10 +19,10 @@ class ExtAnaData(object):
     def _update(self, ch1, ch2, temp, seq, timestamp):
         self.ch1 = ch1
         self.ch2 = ch2
-        self.temp = temp
+        self.temp = temp / 100.0
         self.seq = seq
         self.timestamp = timestamp
 
     def __repr__(self):
-        return 'ch1={}, ch2={}, temp={}, seq={}'.format(self.ch1, self.ch2, self.temp, self.seq)
+        return 'ch1={}, ch2={}, temp={:.1f}, seq={}'.format(self.ch1, self.ch2, self.temp, self.seq)
 
