@@ -13,7 +13,9 @@ ANA_DATA_STRUCT                          = struct.Struct('<HHHB')
 MAX_IMUS                                 = 5
 DEF_TIMEOUT                              = 3
 
-LED_MAX                                  = 3000
+LED_MIN                                  = 0
+LED_MAX                                  = 255.0
+INT_LED_MAX                              = 3000.0
 
 SENSOR_ACC                               = 0x01
 SENSOR_GYRO                              = 0x02
@@ -30,6 +32,7 @@ HANDLE_SENSOR_SELECTION                  = 0x0016
 HANDLE_SOFT_RESET                        = 0x0018
 HANDLE_EXTANA_LED                        = 0x001A 
 HANDLE_PACKET_TIMING                     = 0x001C
+HANDLE_EXTANA_IMU_STREAMING              = 0x001E
 
 HANDLE_DEVICE_NAME                       = 0x0007
 HANDLE_BATTERY_LEVEL                     = 0x001D
