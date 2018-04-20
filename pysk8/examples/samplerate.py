@@ -11,6 +11,7 @@ import logging
 
 pysk8.core.logger.setLevel(logging.DEBUG)
 
+
 def samplerate(port, device_name):
     with Dongle() as dongle: # this will disconnect any active connections when it goes out of scope
 
@@ -34,10 +35,16 @@ def samplerate(port, device_name):
 
         # Enable IMU data streaming from the SK8 only (no external IMUs)
         sk8.enable_imu_streaming([0], enabled_sensors=SENSOR_ALL)
-
         # start_time = time.time()
         last_time = time.time()
         show_data = False
+
+        def imu_callback(acc, gyro, mag, index, seq, timestamp, data):
+            if show_data:
+                print('[{}] acc={}, mag={}, gyro={}, seq={}'.format(index, acc, mag, gyro, seq))
+
+        sk8.set_imu_callback(imu_callback)
+
         while True:
             try:
                 if time.time() - last_time > 1.0:
@@ -52,8 +59,8 @@ def samplerate(port, device_name):
 
                     if -1 not in rates:
                         print('------------')
-                        fmt_f = '{:.1f}' * len(rates)
-                        fmt_d = '{:02d}' * len(rates)
+                        fmt_f = '{:.1f}|' * len(rates)
+                        fmt_d = '{:02d}|' * len(rates)
                         print('Rates: ' + fmt_f.format(*rates))
                         print('Drops: ' + fmt_d.format(*drops))
                     else:
@@ -62,8 +69,6 @@ def samplerate(port, device_name):
                     last_time = time.time()
 
                 time.sleep(0.01)
-                if show_data:
-                    print(sk8.get_imu(0))
 
                 if kbhit():
                     ch = getch()
