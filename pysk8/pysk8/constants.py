@@ -17,6 +17,10 @@ LED_MIN                                  = 0
 LED_MAX                                  = 255.0
 INT_LED_MAX                              = 3000.0
 
+EXT_HW_NONE                              = 0x00
+EXT_HW_IMUS                              = 0x01
+EXT_HW_EXTANA                            = 0x02
+
 SENSOR_ACC                               = 0x01
 SENSOR_GYRO                              = 0x02
 SENSOR_MAG                               = 0x04
@@ -33,6 +37,7 @@ HANDLE_SOFT_RESET                        = 0x0018
 HANDLE_EXTANA_LED                        = 0x001A 
 HANDLE_PACKET_TIMING                     = 0x001C
 HANDLE_EXTANA_IMU_STREAMING              = 0x001E
+HANDLE_HARDWARE_STATE                    = 0x0020
 
 HANDLE_DEVICE_NAME                       = 0x0007
 HANDLE_BATTERY_LEVEL                     = 0x001D
