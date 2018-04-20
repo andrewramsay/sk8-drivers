@@ -1,2 +1,3 @@
 bgapi 
 pyserial 
+future
