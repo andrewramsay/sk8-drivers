@@ -13,11 +13,12 @@ class IMUData(object):
 
     PACKET_PERIOD = 3
 
-    def __init__(self, calibration=True, calibration_data=None):
+    def __init__(self, index, calibration=True, calibration_data=None):
         self.acc = [0, 0, 0]
         self.mag = [0, 0, 0]
         self.gyro = [0, 0, 0]
         self.seq = 0
+        self.index = index
         self._use_calibration = False
         self.has_acc_calib, self.has_mag_calib, self.has_gyro_calib = False, False, False
         self._load_calibration(calibration_data)
@@ -96,5 +97,5 @@ class IMUData(object):
             self.packet_metadata.pop()
 
     def __repr__(self):
-        return 'acc={}, mag={}, gyro={}, seq={}'.format(self.acc, self.mag, self.gyro, self.seq)
+        return '[{}] acc={}, mag={}, gyro={}, seq={}'.format(self.index, self.acc, self.mag, self.gyro, self.seq)
 
