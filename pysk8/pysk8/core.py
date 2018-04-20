@@ -221,7 +221,7 @@ class SK8(object):
         self.imu_callback_data = None
         self.extana_callback = None
         self.extana_callback_data = None
-        self.led_state = (0, 0, 0)
+        self.led_state = None
         self.hardware = None
         if calibration:
             logger.debug('Attempting to load calibration for addr={}'.format(self.addr))
@@ -380,7 +380,7 @@ class SK8(object):
         Returns:
             a 3-tuple (r, g, b) (all unsigned integers) in the range 0-255, or `None` on error.
         """
-        if cached:
+        if cached and self.led_state is not None:
             return self.led_state
 
         rgb = self.dongle._read_attribute(self.conn_handle, HANDLE_EXTANA_LED, israw=True)
