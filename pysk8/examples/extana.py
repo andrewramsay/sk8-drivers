@@ -1,9 +1,14 @@
-import sys
+import sys 
 import time
-import logging
 
 import pysk8
 from pysk8.core import Dongle
+
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+OFF = (0, 0, 0)
+FSR_THRESHOLD = 250
 
 def extana(port, device_name):
     with Dongle() as dongle: # this will disconnect any active connections when it goes out of scope
@@ -26,48 +31,36 @@ def extana(port, device_name):
         # Each entry in this list is an SK8 object representing the physical device
         sk8 = devices[0]
 
-        # Enable ExtAna streaming
-        if not sk8.enable_extana_streaming(True):
+        # Enable ExtAna streaming, optionally with internal IMU active too
+        enable_imu = True
+        if not sk8.enable_extana_streaming(enable_imu):
             sys.exit('Failed to enable streaming!')
 
-        start_time, last_time = time.time(), time.time()
-        c = 0
+        # can optionally get packets through a callback
+        def eana_callback(ch1, ch2, temp, seq, timestamp, data):
+            print(ch1, ch2, seq)
+
+            # LED is green if both channels above threshold, red for channel 1
+            # only, blue for channel 2 only, otherwise off
+            if ch1 > FSR_THRESHOLD and ch2 > FSR_THRESHOLD:
+                sk8.set_extana_led(*GREEN)
+            elif ch1 > FSR_THRESHOLD:
+                sk8.set_extana_led(*RED)
+            elif ch2 > FSR_THRESHOLD:
+                sk8.set_extana_led(*BLUE)
+            else:
+                sk8.set_extana_led(*OFF)
+        sk8.set_extana_callback(eana_callback)
+
         while True:
             try:
-                if time.time() - last_time > 1.0:
-                    elapsed = time.time() - start_time
-                    print('------------')
-                    # display the rate at which data packets are being received
-                    print('Rate: {:.2f}Hz'.format((sk8.get_received_packets() / elapsed)))
-                    last_time = time.time()
-
+                # retrieve latest set of analog data
                 data = sk8.get_extana()
-                print(data)
-                print(sk8.get_imu(0))
-                time.sleep(0.5) 
+                # if IMU enabled above, this should return valid data too
+                imu_data = sk8.get_imu(0)
 
-                if c == 0:
-                    print('RED')
-                    sk8.set_extana_led(255, 0, 0)
-                    print(sk8.get_extana_led())
-                elif c == 1:
-                    print('GREEN')
-                    sk8.set_extana_led(0, 255, 0)
-                    print(sk8.get_extana_led())
-                elif c == 2:
-                    print('BLUE')
-                    sk8.set_extana_led(0, 0, 255)
-                    print(sk8.get_extana_led())
-                elif c == 3:
-                    sk8.set_extana_led(255, 0, 255)
-                    print(sk8.get_extana_led())
-                elif c == 4:
-                    sk8.set_extana_led(0, 255, 255)
-                    print(sk8.get_extana_led())
-                elif c == 5:
-                    sk8.set_extana_led(255, 255, 0)
-                    print(sk8.get_extana_led())
-                c = (c + 1) % 6
+                time.sleep(0.01)
+
             except KeyboardInterrupt:
                 print('Disconnecting...')
                 break
