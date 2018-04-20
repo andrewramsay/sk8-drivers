@@ -14,6 +14,8 @@ import struct
 import time 
 import os
 from configparser import ConfigParser
+import threading
+from queue import Queue
 
 import serial
 import serial.tools.list_ports
@@ -209,7 +211,7 @@ class SK8(object):
         self.name = devinfo.name
         self.firmware_version = None
         self.conn_handle = conn_handle
-        self.imus = [IMUData() for x in range(MAX_IMUS)]
+        self.imus = [IMUData(x) for x in range(MAX_IMUS)]
         self.extana_data = ExtAnaData()
         self.enabled_imus = []
         self.streaming = False
@@ -219,6 +221,8 @@ class SK8(object):
         self.imu_callback_data = None
         self.extana_callback = None
         self.extana_callback_data = None
+        self.led_state = (0, 0, 0)
+        self.hardware = None
         if calibration:
             logger.debug('Attempting to load calibration for addr={}'.format(self.addr))
             self.load_calibration()
@@ -350,6 +354,10 @@ class SK8(object):
             logger.warn('Failed to enable SK8-ExtAna streaming!')
             return False
 
+        # have to add IMU #0 to enabled_imus if include_imu is True
+        if include_imu:
+            self.enabled_imus = [0]
+
         return True
 
     def disable_extana_streaming(self):
@@ -358,40 +366,66 @@ class SK8(object):
         Returns:
             True on success, False if an error occurred.
         """
+        self.enabled_imus = []
         return self.dongle._disable_extana_streaming(self)
 
-    def get_extana_led(self):
+    def get_extana_led(self, cached=True):
         """Returns the current (R, G, B) colour of the SK8-ExtAna LED.
+
+        Args:
+            cached (bool): if True, returns the locally cached state of the LED (based
+                on the last call to :meth:`set_extana_led`). Otherwise query the device
+                for the current state.
 
         Returns:
             a 3-tuple (r, g, b) (all unsigned integers) in the range 0-255, or `None` on error.
         """
+        if cached:
+            return self.led_state
+
         rgb = self.dongle._read_attribute(self.conn_handle, HANDLE_EXTANA_LED, israw=True)
         if rgb is None:
             return rgb
 
         return list(map(lambda x: int(x * (LED_MAX / INT_LED_MAX)), struct.unpack('<HHH', rgb)))
         
-    def set_extana_led(self, r, g, b):
+    def set_extana_led(self, r, g, b, check_state=True):
         """Update the colour of the RGB LED on the SK8-ExtAna board.
 
         Args:
             r (int): red channel, 0-255
             g (int): green channel, 0-255
             b (int): blue channel, 0-255
+            check_state (bool): if True (default) and the locally cached LED state matches
+                the given (r, g, b) triplet, pysk8 will NOT send any LED update command to
+                the SK8. If you want to force the command to be sent even if the local state
+                matches the new colour, set this to False. 
 
         Returns:
             True on success, False if an error occurred.
         """
+
+        r, g, b = map(int, [r, g, b])
+
         if min([r, g, b]) < LED_MIN or max([r, g, b]) > LED_MAX:
             logger.warn('RGB channel values must be {}-{}'.format(LED_MIN, LED_MAX))
             return False
 
+        if check_state and (r, g, b) == self.led_state:
+            return True
+
         # internally range is 0-3000
-        r, g, b = map(lambda x: int(x * (INT_LED_MAX / LED_MAX)), [r, g, b])
-        val = struct.pack('<HHH', r, g, b)
-        return self.dongle._write_attribute(self.conn_handle, HANDLE_EXTANA_LED, val)
-        
+        ir, ig, ib = map(lambda x: int(x * (INT_LED_MAX / LED_MAX)), [r, g, b])
+        val = struct.pack('<HHH', ir, ig, ib)
+            
+        # self._sender_q.put((self.conn_handle, HANDLE_EXTANA_LED, val))
+
+        if not self.dongle._write_attribute(self.conn_handle, HANDLE_EXTANA_LED, val):
+            return False
+
+        # update cached LED state if successful
+        self.led_state = (r, g, b)
+        return True
 
     def set_imu_callback(self, callback, data=None):
         """Register a callback for incoming IMU data packets.
@@ -468,6 +502,7 @@ class SK8(object):
         Returns:
             True on success, False if an error occurred.
         """
+        self.enabled_imus = []
         return self.dongle._disable_imu_streaming(self)
 
     def get_battery_level(self):
@@ -576,13 +611,51 @@ class SK8(object):
         self.imus[imu]._update(acc, gyro, mag, seq, timestamp)
         # call the registered IMU callback if any
         if self.imu_callback is not None:
-            self.imu_callback(acc, gyro, mag, imu, seq, timestamp, self.imu_callback_data)
+            self.dongle._cbthread_q.put((self.imu_callback, (acc, gyro, mag, imu, seq, timestamp, self.imu_callback_data)))
 
     def _update_extana(self, ch1, ch2, temp, seq, timestamp):
         self.extana_data._update(ch1, ch2, temp, seq, timestamp)
         # call the registered ExtAna callback if any
         if self.extana_callback is not None:
-            self.extana_callback(ch1, ch2, temp, seq, timestamp, self.extana_callback_data)
+            self.dongle._cbthread_q.put((self.extana_callback, (ch1, ch2, temp, seq, timestamp, self.extana_callback_data)))
+
+    def _check_hardware(self):
+        self.hardware = ord(self.dongle._read_attribute(self.conn_handle, HANDLE_HARDWARE_STATE))
+        return self.hardware
+
+    def has_extana(self, cached=True):
+        """Can be used to check if an SK8-ExtAna device is currently connected.
+            NOTE: do not attempt to call while data streaming is active!
+
+        Args:
+            cached (bool): if True, use the cached value of the connected hardware
+                state rather than querying the device. Set to False to force a query.
+
+        Returns:
+            bool. True if the SK8 currently has an SK8-ExtAna device attached, False otherwise.
+        """
+        if cached and self.hardware is not None:
+            return True if (self.hardware & EXT_HW_EXTANA) else False
+
+        result = self._check_hardware()
+        return True if (result & EXT_HW_EXTANA) else False
+
+    def has_imus(self, cached=True):
+        """Can be used to check if an external IMU chain is currently connected.
+            NOTE: do not attempt to call while data streaming is active!
+
+        Args:
+            cached (bool): if True, use the cached value of the connected hardware
+                state rather than querying the device. Set to False to force a query.
+
+        Returns:
+            bool. True if the SK8 currently has an IMU chain attached, False otherwise.
+        """
+        if cached and self.hardware is not None:
+            return True if (self.hardware & EXT_HW_IMUS) else False
+
+        result = self._check_hardware()
+        return True if (result & EXT_HW_IMUS != 0) else False
 
     # def _add_characteristic(self, atthandle, value):
     #     for s in self.services.values():
@@ -688,7 +761,17 @@ class Dongle(BlueGigaCallbacks):
         logger.info('Dongle supports {} connections'.format(self.supported_connections))
         self.conn_state = {x: self._STATE_IDLE for x in range(self.supported_connections)}
         self.reset()
+
+        self._cbthread = threading.Thread(target=self._cbthreadfunc)
+        self._cbthread.setDaemon(True)
+        self._cbthread_q = Queue()
+        self._cbthread.start()
         return True
+
+    def _cbthreadfunc(self):
+        while self._cbthread_q is not None:
+            cbfunc, cbparams = self._cbthread_q.get()
+            cbfunc(*cbparams)
 
     @staticmethod
     def find_dongle_port():
@@ -933,7 +1016,7 @@ class Dongle(BlueGigaCallbacks):
         for dev in devicelist:
             logger.info('Connecting to {} (name={})...'.format(dev.addr, dev.name))
             self._set_state(self._STATE_CONNECTING)
-            self.api.ble_cmd_gap_connect_direct(dev.raw_addr, 0, 14, 20, 100, 5)
+            self.api.ble_cmd_gap_connect_direct(dev.raw_addr, 0, 6, 14, 100, 5)
             self._wait_for_state(self._STATE_CONNECTING, 5)
 
             if self.state != self._STATE_CONNECTED:
@@ -1177,7 +1260,7 @@ class Dongle(BlueGigaCallbacks):
 
     def _write_attribute(self, conn_handle, att_handle, value):
         self.attr_write = {}
-        
+
         self._set_conn_state(conn_handle, self._STATE_WRITE_GATT)
         self.api.ble_cmd_attclient_attribute_write(conn_handle, att_handle, value)
         self._wait_for_conn_state(conn_handle, self._STATE_WRITE_GATT, DEF_TIMEOUT)
