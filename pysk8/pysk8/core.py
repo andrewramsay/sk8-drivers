@@ -548,12 +548,6 @@ class SK8(object):
 
         return False
 
-    def temp_get_packet_timing(self):
-        return self.dongle._read_attribute(self.conn_handle, HANDLE_PACKET_TIMING, raw=True)
-
-    def set_packet_timing(self, new_rate):
-        return self.dongle._write_attribute(self.conn_handle, HANDLE_PACKET_TIMING, struct.pack('<B', new_rate))
-
     def get_received_packets(self):
         """Returns number of received data packets.
 
