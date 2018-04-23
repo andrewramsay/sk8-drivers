@@ -39,7 +39,7 @@ HANDLE_EXTANA_IMU_STREAMING              = 0x001E
 HANDLE_HARDWARE_STATE                    = 0x0020
 
 HANDLE_DEVICE_NAME                       = 0x0007
-HANDLE_BATTERY_LEVEL                     = 0x001C
+HANDLE_BATTERY_LEVEL                     = 0x0023
 HANDLE_FIRMWARE_VERSION                  = 0x002D
 
 # UUID_SK8_SERVICE                         = 'b9e32260107411e6a7d50002a5d5c51b'
