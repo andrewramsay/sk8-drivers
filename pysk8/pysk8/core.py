@@ -806,13 +806,7 @@ class Dongle(BlueGigaCallbacks):
             self._wait_for_state(self._STATE_RESET)
 
             for i in range(self.supported_connections):
-                self._set_conn_state(i, self._STATE_DISCONNECTING)
-                self.api.ble_cmd_connection_disconnect(i)
-                self._wait_for_conn_state(i, self._STATE_DISCONNECTING)
-
-            # self._set_state(self._STATE_GAP_END)
-            # self.api.ble_cmd_gap_end_procedure()
-            # self._wait_for_state(self._STATE_GAP_END)
+                self._disconnect(i)
 
         logger.debug('reset completed')
 
