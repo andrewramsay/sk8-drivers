@@ -324,7 +324,7 @@ class SK8Calibration(QMainWindow, Ui_MainWindow):
             totals[2] += gs[2]
 
         for i in range(3):
-            totals[i] = int(totals[i] / len(gyro_samples))
+            totals[i] = int(float(totals[i]) / len(gyro_samples))
 
         print('Saving gyro offsets for {}'.format(self.current_imuid))
         self.calibration_data[self.current_imuid][self.GYROX_OFFSET] = str(totals[0])
@@ -363,10 +363,8 @@ class SK8Calibration(QMainWindow, Ui_MainWindow):
     def calculate_mag_calibration(self, mag_samples):
         # mag_samples = [+x, -x, +y, -y, +z, -z]
 
-        print(mag_samples)
         max_vals = [mag_samples[0][0], mag_samples[2][1], mag_samples[3][2]]
         min_vals = [mag_samples[1][0], mag_samples[3][1], mag_samples[5][2]]
-        print(max_vals)
 
         magbiases = [int((max_vals[i] + min_vals[i]) / 2.0) for i in range(3)]
         magscalings = [(max_vals[i] - min_vals[i]) / 2.0 for i in range(3)]
