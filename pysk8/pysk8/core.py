@@ -16,6 +16,7 @@ import os
 from configparser import ConfigParser
 import threading
 from queue import Queue
+from pkg_resources import parse_version
 
 import serial
 import serial.tools.list_ports
@@ -209,7 +210,7 @@ class SK8(object):
         self.addr = devinfo.addr
         self.raw_addr = devinfo.raw_addr
         self.name = devinfo.name
-        self.firmware_version = None
+        self.firmware_version = 'unknown'
         self.conn_handle = conn_handle
         self.imus = [IMUData(x) for x in range(MAX_IMUS)]
         self.extana_data = ExtAnaData()
@@ -222,10 +223,17 @@ class SK8(object):
         self.extana_callback = None
         self.extana_callback_data = None
         self.led_state = None
-        self.hardware = None
+        self.hardware = -1
         if calibration:
             logger.debug('Attempting to load calibration for addr={}'.format(self.addr))
             self.load_calibration()
+
+
+    def _check_firmware_version(self):
+        self.get_firmware_version()
+        if self.firmware_version is not None and parse_version(self.firmware_version) < parse_version(MIN_FIRMWARE):
+            logger.warn('This version of pysk8 requires an SK8 with firmware version >= {}, found {}'.format(MIN_FIRMWARE, self.firmware_version))
+            logger.warn('You can continue but some functionality may not work!')
 
     def __eq__(self, v):
         """Devices considered equal if address or name match"""
@@ -301,7 +309,7 @@ class SK8(object):
         """
         result = False
         logger.debug('SK8.disconnect({})'.format(self.conn_handle))
-        if self.conn_handle > 0:
+        if self.conn_handle >= 0:
             logger.debug('Calling dongle disconnect')
             result = self.dongle._disconnect(self.conn_handle)
             self.conn_handle = -1
@@ -380,7 +388,7 @@ class SK8(object):
         Returns:
             a 3-tuple (r, g, b) (all unsigned integers) in the range 0-255, or `None` on error.
         """
-        if cached and self.led_state is not None:
+        if cached:
             return self.led_state
 
         rgb = self.dongle._read_attribute(self.conn_handle, HANDLE_EXTANA_LED, israw=True)
@@ -527,7 +535,7 @@ class SK8(object):
         Returns:
             str. The current device name. May be `None` if an error occurs.
         """
-        if cached and self.name is not None:
+        if cached:
             return self.name
 
         self.name = self.dongle._read_attribute(self.conn_handle, HANDLE_DEVICE_NAME)
@@ -572,7 +580,7 @@ class SK8(object):
         Returns:
             str. The current firmware version string. May be `None` if an error occurs.
         """
-        if cached and self.firmware_version is not None:
+        if cached:
             return self.firmware_version
 
         self.firmware_version = self.dongle._read_attribute(self.conn_handle, HANDLE_FIRMWARE_VERSION)
@@ -628,7 +636,7 @@ class SK8(object):
         Returns:
             bool. True if the SK8 currently has an SK8-ExtAna device attached, False otherwise.
         """
-        if cached and self.hardware is not None:
+        if cached and self.hardware != -1:
             return True if (self.hardware & EXT_HW_EXTANA) else False
 
         result = self._check_hardware()
@@ -645,7 +653,7 @@ class SK8(object):
         Returns:
             bool. True if the SK8 currently has an IMU chain attached, False otherwise.
         """
-        if cached and self.hardware is not None:
+        if cached and self.hardware != -1:
             return True if (self.hardware & EXT_HW_IMUS) else False
 
         result = self._check_hardware()
@@ -806,7 +814,9 @@ class Dongle(BlueGigaCallbacks):
             self._wait_for_state(self._STATE_RESET)
 
             for i in range(self.supported_connections):
-                self._disconnect(i)
+                self._set_conn_state(i, self._STATE_DISCONNECTING)
+                self.api.ble_cmd_connection_disconnect(i)	
+                self._wait_for_conn_state(i, self._STATE_DISCONNECTING)
 
         logger.debug('reset completed')
 
@@ -1021,6 +1031,7 @@ class Dongle(BlueGigaCallbacks):
             sk8 = SK8(self, conn_handle, dev, calibration)
             self._add_device(sk8)
             connected_devices.append(sk8)
+            sk8._check_firmware_version()
 
             time.sleep(0.1) # TODO
         return (all_connected, connected_devices)
@@ -1068,6 +1079,7 @@ class Dongle(BlueGigaCallbacks):
         logger.info('Connection OK, handle is 0x{:02X}'.format(conn_handle))
         sk8 = SK8(self, conn_handle, device, calibration)
         self._add_device(sk8)
+        sk8._check_firmware_version()
 
         return (True, sk8)
 
@@ -1201,7 +1213,9 @@ class Dongle(BlueGigaCallbacks):
         self._set_conn_state(handle, self._STATE_DISCONNECTING)
         self.api.ble_cmd_connection_disconnect(handle)
         self._wait_for_conn_state(handle, self._STATE_DISCONNECTING)
-        self.conn_handles.remove(handle)
+        if handle in self.conn_handles:
+            logger.debug('Removing conn handle')
+            self.conn_handles.remove(handle)
         return True
 
     def _wait_for_state(self, state, timeout=DEF_TIMEOUT):

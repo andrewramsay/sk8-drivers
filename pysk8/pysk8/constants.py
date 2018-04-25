@@ -26,6 +26,8 @@ SENSOR_GYRO                              = 0x02
 SENSOR_MAG                               = 0x04
 SENSOR_ALL                               = SENSOR_ACC | SENSOR_GYRO | SENSOR_MAG
 
+# TODO this is really not needed and code should be fixed ASAP and this removed
+MIN_FIRMWARE                             = '0.0.2.0'
 # TODO
 # these handles may change when the firmware is modified significantly
 # for now, accessing things by handle avoids the need to do service/char discovery
@@ -40,7 +42,7 @@ HANDLE_HARDWARE_STATE                    = 0x0020
 
 HANDLE_DEVICE_NAME                       = 0x0007
 HANDLE_BATTERY_LEVEL                     = 0x0023
-HANDLE_FIRMWARE_VERSION                  = 0x002D
+HANDLE_FIRMWARE_VERSION                  = 0x0035
 
 # UUID_SK8_SERVICE                         = 'b9e32260107411e6a7d50002a5d5c51b'
 # UUID_IMU_CHAR                            = 'b9e32261107411e6a7d50002a5d5c51b'
