@@ -13,17 +13,22 @@ class IMUData(object):
 
     PACKET_PERIOD = 3
 
-    def __init__(self, index, calibration=True, calibration_data=None):
+    def __init__(self, index, calibration_data=None):
+        self.calibration_data = calibration_data
+        self.index = index
+        self.reset()
+
+    def reset(self):
         self.acc = [0, 0, 0]
         self.mag = [0, 0, 0]
         self.gyro = [0, 0, 0]
         self.seq = 0
-        self.index = index
         self._use_calibration = False
         self.has_acc_calib, self.has_mag_calib, self.has_gyro_calib = False, False, False
-        self._load_calibration(calibration_data)
+        self._load_calibration(self.calibration_data)
         self.packet_metadata = []
         self.packet_start = time.time()
+        self.packets_lost = 0
 
     def get_sample_rate(self):
         if time.time() - self.packet_start < IMUData.PACKET_PERIOD:
@@ -36,6 +41,9 @@ class IMUData(object):
             return -1
 
         return sum([x[1] for x in self.packet_metadata])
+
+    def get_total_packets_lost(self):
+        return self.pakcets_lost 
 
     def _load_calibration(self, calibration_data):
         axes = ['x', 'y', 'z']
@@ -89,6 +97,7 @@ class IMUData(object):
             expected = (self.seq + 1) % 256
             if expected != seq:
                 dropped = (expected - seq) % 256
+                self.packets_lost += dropped
         self.seq = seq
         self.timestamp = timestamp
         self.packet_metadata.insert(0, (timestamp, dropped))
