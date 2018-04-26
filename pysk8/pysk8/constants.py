@@ -26,30 +26,36 @@ SENSOR_GYRO                              = 0x02
 SENSOR_MAG                               = 0x04
 SENSOR_ALL                               = SENSOR_ACC | SENSOR_GYRO | SENSOR_MAG
 
-# TODO this is really not needed and code should be fixed ASAP and this removed
-MIN_FIRMWARE                             = '0.0.2.0'
-# TODO
-# these handles may change when the firmware is modified significantly
-# for now, accessing things by handle avoids the need to do service/char discovery
-HANDLE_CCC_IMU                           = 0x000F 
-HANDLE_CCC_ANA                           = 0x0012
-HANDLE_IMU_SELECTION                     = 0x0014
-HANDLE_SENSOR_SELECTION                  = 0x0016
-HANDLE_SOFT_RESET                        = 0x0018
-HANDLE_EXTANA_LED                        = 0x001A 
-HANDLE_EXTANA_IMU_STREAMING              = 0x001E
-HANDLE_HARDWARE_STATE                    = 0x0020
 
-HANDLE_DEVICE_NAME                       = 0x0007
-HANDLE_BATTERY_LEVEL                     = 0x0023
-HANDLE_FIRMWARE_VERSION                  = 0x0035
+UUID_BATTERY_LEVEL                       = '2a19'
+UUID_DEVICE_NAME                         = '2a00'
+UUID_FIRMWARE_REVISION                   = '2a26'
+UUID_SK8_SERVICE                         = 'b9e32260107411e6a7d50002a5d5c51b'
+UUID_IMU_CCC                             = 'b9e32261107411e6a7d50002a5d5c51b'
+UUID_FSR_CCC                             = 'b9e32262107411e6a7d50002a5d5c51b'
+UUID_IMU_SELECTION                       = 'b9e32263107411e6a7d50002a5d5c51b'
+UUID_SENSOR_SELECTION                    = 'b9e32264107411e6a7d50002a5d5c51b'
+UUID_SOFT_RESET                          = 'b9e32265107411e6a7d50002a5d5c51b'
+UUID_EXTANA_LED                          = 'b9e32266107411e6a7d50002a5d5c51b'
+UUID_EXTANA_IMU_STREAMING                = 'b9e32267107411e6a7d50002a5d5c51b'
+UUID_HARDWARE_STATE                      = 'b9e32269107411e6a7d50002a5d5c51b'
 
-# UUID_SK8_SERVICE                         = 'b9e32260107411e6a7d50002a5d5c51b'
-# UUID_IMU_CHAR                            = 'b9e32261107411e6a7d50002a5d5c51b'
+UUIDS_TO_DISCOVER = \
+    [
+        UUID_IMU_CCC,
+        UUID_FSR_CCC,
+        UUID_IMU_SELECTION,
+        UUID_SENSOR_SELECTION,
+        UUID_SOFT_RESET,
+        UUID_EXTANA_LED,
+        UUID_EXTANA_IMU_STREAMING,
+        UUID_HARDWARE_STATE,
+    ]
 
-UUID_GATT_PRIMARY_SERVICE                = '\x00\x28'
-UUID_GATT_CHAR_DECL                      = '\x03\x28'
-UUID_GATT_CCC                            = '\x02\x29'
+RAW_UUID_GATT_PRIMARY_SERVICE                = b'\x00\x28'
+RAW_UUID_GATT_CHAR_DECL                      = b'\x03\x28'
+RAW_UUID_GATT_CCC                            = b'\x02\x29'
+UUID_GATT_CCC                                = '2902'
 
 # characteristic properties
 PROP_BROADCAST                           = 0x01
