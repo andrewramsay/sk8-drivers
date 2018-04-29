@@ -32,18 +32,23 @@ UUID_DEVICE_NAME                         = '2a00'
 UUID_FIRMWARE_REVISION                   = '2a26'
 UUID_SK8_SERVICE                         = 'b9e32260107411e6a7d50002a5d5c51b'
 UUID_IMU_CCC                             = 'b9e32261107411e6a7d50002a5d5c51b'
-UUID_FSR_CCC                             = 'b9e32262107411e6a7d50002a5d5c51b'
+UUID_EXTANA_CCC                          = 'b9e32262107411e6a7d50002a5d5c51b'
 UUID_IMU_SELECTION                       = 'b9e32263107411e6a7d50002a5d5c51b'
 UUID_SENSOR_SELECTION                    = 'b9e32264107411e6a7d50002a5d5c51b'
 UUID_SOFT_RESET                          = 'b9e32265107411e6a7d50002a5d5c51b'
 UUID_EXTANA_LED                          = 'b9e32266107411e6a7d50002a5d5c51b'
-UUID_EXTANA_IMU_STREAMING                = 'b9e32267107411e6a7d50002a5d5c51b'
+
+# TODO messed up UUIDs in FW up to and including v0.0.2.0, so have to check
+# for existence of both old and correct versions of these two
+UUID_EXTANA_IMU_STREAMING                = 'b9e32286107411e6a7d50002a5d5c51b'
+UUID_EXTANA_IMU_STREAMING_TMP            = 'b9e32268107411e6a7d50002a5d5c51b'
 UUID_HARDWARE_STATE                      = 'b9e32269107411e6a7d50002a5d5c51b'
+UUID_HARDWARE_STATE_TMP                  = 'b9e32296107411e6a7d50002a5d5c51b'
 
 UUIDS_TO_DISCOVER = \
     [
         UUID_IMU_CCC,
-        UUID_FSR_CCC,
+        UUID_EXTANA_CCC,
         UUID_IMU_SELECTION,
         UUID_SENSOR_SELECTION,
         UUID_SOFT_RESET,
