@@ -226,6 +226,9 @@ class SK8Calibration(QMainWindow, Ui_MainWindow):
         self.data_timer = QtCore.QTimer(self)
         self.data_timer.setInterval(30)
         self.data_timer.timeout.connect(self.update_data)
+        self.battery_timer = QtCore.QTimer(self)
+        self.battery_timer.setInterval(3000)
+        self.battery_timer.timeout.connect(self.update_battery)
         self.gyro_dialog = None
         self.acc_dialog = None
         self.mag_dialog = None
@@ -243,6 +246,12 @@ class SK8Calibration(QMainWindow, Ui_MainWindow):
             return self.calibration_data[self.current_imuid]
 
         return {}
+
+    def update_battery(self):
+        if self.sk8 is None:
+            return
+        battery = self.sk8.get_battery_level()
+        self.lblBattery.setText('Battery: {}%'.format(battery))
 
     def imu_changed(self, val):
         """Handle clicks on the IMU index spinner."""
@@ -467,6 +476,7 @@ class SK8Calibration(QMainWindow, Ui_MainWindow):
         if self.sk8 is not None:
             # disconnect
             self.data_timer.stop()
+            self.battery_timer.stop()
             self.sk8.disconnect()
             self.sk8 = None
             print('Disconnected')
@@ -497,6 +507,8 @@ class SK8Calibration(QMainWindow, Ui_MainWindow):
         self.statusbar.showMessage('Connected to {}'.format(dev.device.name))
         self.sk8.enable_imu_streaming([0, 1, 2, 3, 4])
         self.data_timer.start()
+        self.update_battery()
+        self.battery_timer.start()
         self.btnRefresh.setEnabled(False)
         self.spinIMU.setEnabled(True)
         self.btnAcc.setEnabled(True)
