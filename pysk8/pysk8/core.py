@@ -8,7 +8,6 @@ with more information about this dongle can be found
 
 """
 
-import sys
 import logging
 import struct 
 import time 
@@ -16,7 +15,6 @@ import os
 from configparser import ConfigParser
 import threading
 from queue import Queue
-from pkg_resources import parse_version
 
 import serial
 import serial.tools.list_ports
@@ -29,6 +27,7 @@ from pysk8.util import pp_hex, fmt_addr, fmt_addr_raw
 from pysk8.constants import *
 from pysk8.imu import IMUData
 from pysk8.extana import ExtAnaData
+from pysk8.discovery import Service
 
 # bgapi is pretty verbose and usually won't need to see most of what it produces
 bglogger = logging.getLogger('bgapi')
@@ -224,16 +223,11 @@ class SK8(object):
         self.extana_callback_data = None
         self.led_state = None
         self.hardware = -1
+        self.uuid_chars = {}
+        self.uuid_cccds = {}
         if calibration:
             logger.debug('Attempting to load calibration for addr={}'.format(self.addr))
             self.load_calibration()
-
-
-    def _check_firmware_version(self):
-        self.get_firmware_version()
-        if self.firmware_version is not None and parse_version(self.firmware_version) < parse_version(MIN_FIRMWARE):
-            logger.warn('This version of pysk8 requires an SK8 with firmware version >= {}, found {}'.format(MIN_FIRMWARE, self.firmware_version))
-            logger.warn('You can continue but some functionality may not work!')
 
     def __eq__(self, v):
         """Devices considered equal if address or name match"""
@@ -391,7 +385,12 @@ class SK8(object):
         if cached:
             return self.led_state
 
-        rgb = self.dongle._read_attribute(self.conn_handle, HANDLE_EXTANA_LED, israw=True)
+        extana_led = self.get_characteristic_handle_from_uuid(UUID_EXTANA_LED)
+        if extana_led is None:
+            logger.warn('Failed to find handle for ExtAna LED')
+            return None
+
+        rgb = self.dongle._read_attribute(self.conn_handle, extana_led, israw=True)
         if rgb is None:
             return rgb
 
@@ -425,10 +424,13 @@ class SK8(object):
         # internally range is 0-3000
         ir, ig, ib = map(lambda x: int(x * (INT_LED_MAX / LED_MAX)), [r, g, b])
         val = struct.pack('<HHH', ir, ig, ib)
-            
-        # self._sender_q.put((self.conn_handle, HANDLE_EXTANA_LED, val))
 
-        if not self.dongle._write_attribute(self.conn_handle, HANDLE_EXTANA_LED, val):
+        extana_led = self.get_characteristic_handle_from_uuid(UUID_EXTANA_LED)
+        if extana_led is None:
+            logger.warn('Failed to find handle for ExtAna LED')
+            return None
+            
+        if not self.dongle._write_attribute(self.conn_handle, extana_led, val):
             return False
 
         # update cached LED state if successful
@@ -511,6 +513,9 @@ class SK8(object):
             True on success, False if an error occurred.
         """
         self.enabled_imus = []
+        # reset IMU data state
+        for imu in self.imus:
+            imu.reset()
         return self.dongle._disable_imu_streaming(self)
 
     def get_battery_level(self):
@@ -520,7 +525,13 @@ class SK8(object):
             int. If successful this will be a positive value representing the current 
             battery level as a percentage. On error, -1 is returned. 
         """
-        level = self.dongle._read_attribute(self.conn_handle, HANDLE_BATTERY_LEVEL)
+
+        battery_level = self.get_characteristic_handle_from_uuid(UUID_BATTERY_LEVEL)
+        if battery_level is None:
+            logger.warn('Failed to find handle for battery level')
+            return None
+
+        level = self.dongle._read_attribute(self.conn_handle, battery_level)
         if level is None:
             return -1
         return ord(level)
@@ -535,10 +546,15 @@ class SK8(object):
         Returns:
             str. The current device name. May be `None` if an error occurs.
         """
-        if cached:
+        if cached and self.name is not None:
             return self.name
 
-        self.name = self.dongle._read_attribute(self.conn_handle, HANDLE_DEVICE_NAME)
+        device_name = self.get_characteristic_handle_from_uuid(UUID_DEVICE_NAME)
+        if device_name is None:
+            logger.warn('Failed to find handle for device name')
+            return None
+
+        self.name = self.dongle._read_attribute(self.conn_handle, device_name)
         return self.name
 
     def set_device_name(self, new_name):
@@ -550,7 +566,13 @@ class SK8(object):
         Returns:
             True if the name was updated successfully, False otherwise.
         """
-        if self.dongle._write_attribute(self.conn_handle, HANDLE_DEVICE_NAME, new_name.encode('ascii')):
+
+        device_name = self.get_characteristic_handle_from_uuid(UUID_DEVICE_NAME)
+        if device_name is None:
+            logger.warn('Failed to find handle for device name')
+            return None
+        
+        if self.dongle._write_attribute(self.conn_handle, device_name, new_name.encode('ascii')):
             self.name = new_name
             return True
 
@@ -580,10 +602,15 @@ class SK8(object):
         Returns:
             str. The current firmware version string. May be `None` if an error occurs.
         """
-        if cached:
+        if cached and self.firmware_version != 'unknown':
             return self.firmware_version
 
-        self.firmware_version = self.dongle._read_attribute(self.conn_handle, HANDLE_FIRMWARE_VERSION)
+        firmware_version = self.get_characteristic_handle_from_uuid(UUID_FIRMWARE_REVISION)
+        if firmware_version is None:
+            logger.warn('Failed to find handle for device name')
+            return None
+
+        self.firmware_version = self.dongle._read_attribute(self.conn_handle, firmware_version)
         return self.firmware_version
 
     def get_imu(self, imu_number):
@@ -622,7 +649,16 @@ class SK8(object):
             self.dongle._cbthread_q.put((self.extana_callback, (ch1, ch2, temp, seq, timestamp, self.extana_callback_data)))
 
     def _check_hardware(self):
-        self.hardware = ord(self.dongle._read_attribute(self.conn_handle, HANDLE_HARDWARE_STATE))
+        hardware_state = self.get_characteristic_handle_from_uuid(UUID_HARDWARE_STATE)
+        hardware_state_tmp = self.get_characteristic_handle_from_uuid(UUID_HARDWARE_STATE_TMP)
+        if hardware_state is None and hardware_state_tmp is None:
+            logger.warn('Failed to find handle for hardware state')
+            return -1
+
+        if hardware_state is not None:
+            self.hardware = ord(self.dongle._read_attribute(self.conn_handle, hardware_state))
+        else:
+            self.hardware = ord(self.dongle._read_attribute(self.conn_handle, hardware_state_tmp))
         return self.hardware
 
     def has_extana(self, cached=True):
@@ -659,30 +695,129 @@ class SK8(object):
         result = self._check_hardware()
         return True if (result & EXT_HW_IMUS != 0) else False
 
-    # def _add_characteristic(self, atthandle, value):
-    #     for s in self.services.values():
-    #         if s.start_handle <= atthandle and s.end_handle >= atthandle:
-    #             s.add_characteristic(atthandle, value)
-    #             logger.debug('add char %02X to service %s' % (atthandle, s.uuid))
+    def pp_services(self):
+        """Display (somewhat) pretty-printed dump of service, charactertistic 
+            and descriptor information for this device. 
+            
+        Returns:
+            Nothing.
+        """
+        for s in self.services.values():
+            s.pp()
 
-    # def _add_service(self, start_handle, end_handle, uuid):
-    #     self.services[pp_hex(uuid)] = Service(start_handle, end_handle, uuid)
+    def _discover_services(self):
+        """Starts a service discovery operation on the SK8, to build up 
+        information on the services, characteristics and descriptors defined in
+        its GATT database.
+        
+        Returns:
+            list. A list of :class:`Service` objects.
 
-    # def get_service(self, uuid):
-    #     if uuid in self.services:
-    #         return self.services[uuid]
+        """
+        return self.dongle._discover_services(self)
 
-    #     if pp_hex(uuid) in self.services:
-    #         return self.services[pp_hex(uuid)]
+    def get_characteristic_handle_from_uuid(self, uuid):
+        """Given a characteristic UUID, return its handle.
+    
+        Args:
+            uuid (str): a string containing the hex-encoded UUID
 
-    #     return None
+        Returns:
+            None if an error occurs, otherwise an integer handle. 
+        """
+        ch = self.get_characteristic_from_uuid(uuid)
+        return None if ch is None else ch.char_handle
 
-    # def get_service_for_handle(self, handle):
-    #     for s in self.services.values():
-    #         if s.start_handle <= handle and s.end_handle >= handle:
-    #             return s
+    def get_characteristic_from_uuid(self, uuid):
+        """Given a characteristic UUID, return a :class:`Characteristic` object
+        containing information about that characteristic
 
-    #     return None
+        Args:
+            uuid (str): a string containing the hex-encoded UUID
+
+        Returns:
+            None if an error occurs, otherwise a :class:`Characteristic` object
+        """
+
+        if uuid in self.uuid_chars:
+            logger.debug('Returning cached info for char: {}'.format(uuid))
+            return self.uuid_chars[uuid]
+
+        for service in self.services.values():
+            char = service.get_characteristic_by_uuid(uuid)
+            if char is not None:
+                self.uuid_chars[uuid] = char
+                logger.debug('Found char for UUID: {}'.format(uuid))
+                return char
+
+        logger.warn('Failed to find char for UUID: {}'.format(uuid))
+        return None
+
+    def get_ccc_handle_from_uuid(self, uuid):
+        """Utility function to retrieve the client characteristic configuration
+        descriptor handle for a given characteristic.
+        
+        Args:
+            uuid (str): a string containing the hex-encoded UUID
+            
+        Returns:
+            None if an error occurs, otherwise an integer handle.
+        """
+
+        if uuid in self.uuid_cccds:
+            return self.uuid_cccds[uuid].handle
+        
+        char = self.get_characteristic_from_uuid(uuid)
+        if char is None:
+            return None
+
+        ccc = char.get_descriptor_by_uuid(UUID_GATT_CCC)
+        if ccc is not None:
+            self.uuid_cccds[uuid] = ccc
+        return None if ccc is None else ccc.handle
+
+    def _add_characteristic(self, atthandle, value):
+        for s in self.services.values():
+            if s.start_handle <= atthandle and s.end_handle >= atthandle:
+                logger.debug('add char %02X to service %s' % (atthandle, s.uuid))
+                return s.add_characteristic(atthandle, value)
+
+    def _add_service(self, start_handle, end_handle, uuid):
+        self.services[pp_hex(uuid)] = Service(start_handle, end_handle, uuid)
+        return self.services[pp_hex(uuid)]
+
+    def get_service(self, uuid):
+        """Lookup information about a given GATT service.
+
+        Args:
+            uuid (str): a string containing the hex-encoded service UUID
+
+        Returns:
+            None if an error occurs, otherwise a :class:`Service` object.
+        """
+        if uuid in self.services:
+            return self.services[uuid]
+
+        if pp_hex(uuid) in self.services:
+            return self.services[pp_hex(uuid)]
+
+        return None
+
+    def get_service_for_handle(self, handle):
+        """Given a characteristic handle, return the :class:`Service` object that
+        the handle belongs to. 
+
+        Args:
+            handle (int): the characteristic handle
+
+        Returns:
+            None if no service matches the given handle, otherwise a :class:`Service` object.
+        """
+        for s in self.services.values():
+            if s.start_handle <= handle and s.end_handle >= handle:
+                return s
+
+        return None
 
 class Dongle(BlueGigaCallbacks):
     """Represents a physical BLED112 dongle.
@@ -829,6 +964,37 @@ class Dongle(BlueGigaCallbacks):
         if self.api is not None:
             self.api.stop_daemon()
             self.api = None
+
+    def _discover_services(self, sk8):
+        """ TODO """
+
+        ts = time.time()
+
+        # start by discovering primary service UUIDs
+        # params to ble_cmd_attclient_read_by_group_type are:
+        #   conn_handle, start handle, end handle, UUID identifier to match (little endian)
+        self._set_conn_state(sk8.conn_handle, self._STATE_DISCOVER_SERVICES)
+        self.api.ble_cmd_attclient_read_by_group_type(sk8.conn_handle, 0x0001, 0xFFFF, RAW_UUID_GATT_PRIMARY_SERVICE)
+        self._wait_for_conn_state(sk8.conn_handle, self._STATE_DISCOVER_SERVICES)
+        logger.debug('Service discovery took: {:.3f}s'.format(time.time() - ts))
+
+        logger.debug('Found {} primary services'.format(sk8.services))
+
+        # now discover characteristics and descriptors within each service
+        tc = time.time()
+        for service in sk8.services.values():
+            self._set_conn_state(sk8.conn_handle, self._STATE_DISCOVER_CHARS)
+            self.api.ble_cmd_attclient_read_by_type(sk8.conn_handle, service.start_handle, service.end_handle, RAW_UUID_GATT_CHAR_DECL)
+            self._wait_for_conn_state(sk8.conn_handle, self._STATE_DISCOVER_CHARS)
+
+            self._set_conn_state(sk8.conn_handle, self._STATE_DISCOVER_DESCS)
+            self.api.ble_cmd_attclient_find_information(sk8.conn_handle, service.start_handle, service.end_handle)
+            self._wait_for_conn_state(sk8.conn_handle, self._STATE_DISCOVER_DESCS)
+
+        logger.debug('Characteristic discovery took: {:.3f}s'.format(time.time() - tc))
+
+        return True
+
 
     def get_connection_interval(self):
         """Returns the current BLE connection interval in ms"""
@@ -1031,7 +1197,7 @@ class Dongle(BlueGigaCallbacks):
             sk8 = SK8(self, conn_handle, dev, calibration)
             self._add_device(sk8)
             connected_devices.append(sk8)
-            sk8._check_firmware_version()
+            sk8._discover_services()
 
             time.sleep(0.1) # TODO
         return (all_connected, connected_devices)
@@ -1079,7 +1245,7 @@ class Dongle(BlueGigaCallbacks):
         logger.info('Connection OK, handle is 0x{:02X}'.format(conn_handle))
         sk8 = SK8(self, conn_handle, device, calibration)
         self._add_device(sk8)
-        sk8._check_firmware_version()
+        sk8._discover_services()
 
         return (True, sk8)
 
@@ -1253,6 +1419,7 @@ class Dongle(BlueGigaCallbacks):
 
         data = self.attr_read[conn_handle].get(att_handle, None)
         if data is None:
+            logger.warn('Reading attribute 0x{:04X} failed'.format(att_handle))
             return None
 
         if israw:
@@ -1286,14 +1453,22 @@ class Dongle(BlueGigaCallbacks):
         self.conn_state[c] = s
 
     def _enable_imu_streaming(self, dev, imu_state, sensor_state):
+
+        imu_select = dev.get_characteristic_handle_from_uuid(UUID_IMU_SELECTION)
+        sensor_select = dev.get_characteristic_handle_from_uuid(UUID_SENSOR_SELECTION)
+
+        if imu_select is None or sensor_select is None:
+            logger.warn('Failed to find handles for IMU configuration!')
+            return False
+
         logger.debug('setting IMU state = {:02X} on device {}'.format(imu_state, dev.addr))
-        self._write_attribute(dev.conn_handle, HANDLE_IMU_SELECTION, struct.pack('B', imu_state))
+        self._write_attribute(dev.conn_handle, imu_select, struct.pack('B', imu_state))
         time.sleep(0.1)
-        self._write_attribute(dev.conn_handle, HANDLE_SENSOR_SELECTION, struct.pack('B', sensor_state))
+        self._write_attribute(dev.conn_handle, sensor_select, struct.pack('B', sensor_state))
         logger.debug('Completed configuring IMUs on device {}'.format(dev.addr))
 
         self._set_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
-        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, HANDLE_CCC_IMU, b'\x01\x00')
+        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_IMU_CCC), b'\x01\x00')
         self._wait_for_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
 
         if self.conn_state[dev.conn_handle] != self._STATE_STREAMING:
@@ -1307,21 +1482,37 @@ class Dongle(BlueGigaCallbacks):
     def _enable_extana_streaming(self, dev, include_imu, enabled_sensors):
         # if we want to stream internal IMU data too, set that up first
         if include_imu:
+            imu_select = dev.get_characteristic_handle_from_uuid(UUID_IMU_SELECTION)
+            sensor_select = dev.get_characteristic_handle_from_uuid(UUID_SENSOR_SELECTION)
+
+            if imu_select is None or sensor_select is None:
+                logger.warn('Failed to find handles for IMU configuration!')
+                return False
+
             # set up IMU state before activating streaming
             imu_state = 0x01
             logger.debug('setting IMU state = {:02X} on device {}'.format(imu_state, dev.addr))
-            self._write_attribute(dev.conn_handle, HANDLE_IMU_SELECTION, struct.pack('B', imu_state))
+            self._write_attribute(dev.conn_handle, imu_select, struct.pack('B', imu_state))
             time.sleep(0.1)
-            self._write_attribute(dev.conn_handle, HANDLE_SENSOR_SELECTION, struct.pack('B', enabled_sensors))
+            self._write_attribute(dev.conn_handle, sensor_select, struct.pack('B', enabled_sensors))
             logger.debug('Completed configuring IMUs on device {}'.format(dev.addr))
+
+        extana_imu_streaming = dev.get_characteristic_handle_from_uuid(UUID_EXTANA_IMU_STREAMING)
+        extana_imu_streaming_tmp = dev.get_characteristic_handle_from_uuid(UUID_EXTANA_IMU_STREAMING_TMP)
+        if extana_imu_streaming is None and extana_imu_streaming_tmp is None:
+            logger.warn('Failed to find handles for ExtAna configuration')
+            return False
 
         # write to the char that will actually enable the sending of IMU packets
         # while ExtAna streaming is active
-        self._write_attribute(dev.conn_handle, HANDLE_EXTANA_IMU_STREAMING, struct.pack('B', 1 if include_imu else 0))
+        if extana_imu_streaming is not None:
+            self._write_attribute(dev.conn_handle, extana_imu_streaming, struct.pack('B', 1 if include_imu else 0))
+        else:
+            self._write_attribute(dev.conn_handle, extana_imu_streaming_tmp, struct.pack('B', 1 if include_imu else 0))
 
         # enable ExtAna streaming
         self._set_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
-        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, HANDLE_CCC_ANA, b'\x01\x00')
+        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), b'\x01\x00')
         self._wait_for_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
 
         if self.conn_state[dev.conn_handle] != self._STATE_STREAMING:
@@ -1333,13 +1524,13 @@ class Dongle(BlueGigaCallbacks):
 
     def _disable_imu_streaming(self, dev):
         self._set_conn_state(dev.conn_handle, self._STATE_CONFIGURE_IMUS)
-        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, HANDLE_CCC_IMU, b'\x00\x00')
+        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_IMU_CCC), b'\x00\x00')
         self._wait_for_conn_state(dev.conn_handle, self._STATE_CONFIGURE_IMUS)
         return True
 
     def _disable_extana_streaming(self, dev):
         self._set_conn_state(dev.conn_handle, self._STATE_CONFIGURE_ANA)
-        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, HANDLE_CCC_ANA, b'\x00\x00')
+        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), b'\x00\x00')
         self._wait_for_conn_state(dev.conn_handle, self._STATE_CONFIGURE_ANA)
         return True
 
@@ -1494,21 +1685,32 @@ class Dongle(BlueGigaCallbacks):
         if connection in self.conn_devices:
             dev = self.conn_devices[connection]
             # check if this is a char declaration
-            if uuid == UUID_GATT_CHAR_DECL:
+            if uuid == RAW_UUID_GATT_CHAR_DECL or uuid == RAW_UUID_GATT_CCC:
                 current_service = dev.get_service_for_handle(chrhandle)
                 if chrhandle in current_service.chars:
                     current_char = current_service.chars[chrhandle]
                     logger.debug('Adding desc to char %04X / %s' % (current_char.handle, pp_hex(current_char.value)))
-                    current_char.add_descriptor(chrhandle, uuid)
-            
+                    current_char.add_descriptor(chrhandle, uuid, pp_hex(uuid))
+                else:
+                    if uuid != RAW_UUID_GATT_CCC:
+                        logger.warn('unknown UUID {} not in char {:04X}'.format(pp_hex(uuid), chrhandle))
+
     # events produced during characteristic discovery and notifications
     def ble_evt_attclient_attribute_value(self, connection, atthandle, type, value):
         super(Dongle, self).ble_evt_attclient_attribute_value(connection, atthandle, type, value)
 
-        if type == ATTR_VALUE_TYPE_READ_BY_TYPE and self.state == self._STATE_DISCOVER_CHARS:
-            if connection in self.conn_devices:
+        # logger.debug('attr value: {} {} {} {}'.format(connection, atthandle, type, value))
+        if type == ATTR_VALUE_TYPE_READ_BY_TYPE:
+            if connection in self.conn_devices and self.conn_state[connection] == self._STATE_DISCOVER_CHARS:
                 dev = self.conn_devices[connection]
-                dev._add_characteristic(atthandle, value)
+                char = dev._add_characteristic(atthandle, value)
+                # should also add the descriptor this is linked to
+                char.add_descriptor(char.char_handle, char.raw_uuid, char.uuid)
+                # if this is a notify charactertistic, can add the CCCD here too
+                if char.can_notify():
+                    logger.debug('Found a notify char, adding CCCD with handle {:04X}'.format(atthandle+2))
+                    char.add_descriptor(atthandle + 2, RAW_UUID_GATT_CCC, UUID_GATT_CCC)
+                
 
         if type == ATTR_VALUE_TYPE_READ:
             # standard read attribute operation response
