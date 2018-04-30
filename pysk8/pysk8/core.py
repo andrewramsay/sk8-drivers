@@ -822,6 +822,71 @@ class SK8(object):
 
         return None
 
+    def get_polling_override(self):
+        """Get the current polling override value in milliseconds. 
+
+        See :method:`set_polling_override` for more information. 
+
+        Returns:
+            None on error, otherwise the current override period in milliseconds 
+            (0 = disabled). 
+        """
+        polling_override = self.get_characteristic_handle_from_uuid(UUID_POLLING_OVERRIDE)
+        if polling_override is None:
+            logger.warn('Failed to find handle for device name')
+            return None
+        override_ms = self.dongle._read_attribute(self.conn_handle, polling_override, True)
+        return None if override_ms is None else ord(override_ms)
+
+    def set_polling_override(self, override):
+        """Set the sensor polling timer override value in milliseconds. 
+
+        Due to the time it takes to poll all the sensors on up to 5 IMUs, it's not 
+        possible for the SK8 firmware to define a single fixed rate for reading 
+        new samples without it being artificially low for most configurations. 
+        
+        Instead the firmware tries to define a sensible default value for each 
+        combination of IMUs and sensors that can be enabled (any combination of 
+        1-5 IMUs and 1-3 sensors on each IMU). In most cases this should work well,
+        but for example if you have multiple SK8s connected through the same dongle
+        and have multiple IMUs enabled on each, you may find packets start to be
+        dropped quite frequently. 
+
+        To mitigate this, you can adjust the period of the timer used by the firmware
+        to poll for new sensor data (and send data packets to the host device). The
+        value should be in integer milliseconds, and have a minimum value of 20. Values
+        below 20 will be treated as a request to disable the override and return to the
+        default polling period. 
+
+        The method can be called before or after streaming is activated, and will take
+        effect immediately. 
+
+        NOTE1: the value is stored in RAM and will not persist across reboots, although
+            it should persist for multiple connections.
+        NOTE2: once set, the override applies to ALL sensor configurations, so for 
+            example if you set it while using 5 IMUs on 2 SK8s, then switch to using 
+            1 IMU on each SK8, you will probably want to disable it again as the 
+            latter configuration should work fine with the default period.
+
+        Args:
+            override (int): polling timer override period in milliseconds. Values
+                below 20 are treated as 0, and have the effect of disabling the
+                override in favour of the default periods. 
+
+        Returns:
+            True on success, False on error.
+        """
+        polling_override = self.get_characteristic_handle_from_uuid(UUID_POLLING_OVERRIDE)
+        if polling_override is None:
+            logger.warn('Failed to find handle for device name')
+            return False
+        
+        if self.dongle._write_attribute(self.conn_handle, polling_override, struct.pack('B', override)):
+            return True
+
+        return False
+        
+
 class Dongle(BlueGigaCallbacks):
     """Represents a physical BLED112 dongle.
     
