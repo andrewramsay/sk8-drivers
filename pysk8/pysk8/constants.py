@@ -37,6 +37,7 @@ UUID_IMU_SELECTION                       = 'b9e32263107411e6a7d50002a5d5c51b'
 UUID_SENSOR_SELECTION                    = 'b9e32264107411e6a7d50002a5d5c51b'
 UUID_SOFT_RESET                          = 'b9e32265107411e6a7d50002a5d5c51b'
 UUID_EXTANA_LED                          = 'b9e32266107411e6a7d50002a5d5c51b'
+UUID_POLLING_OVERRIDE                    = 'b9e3226a107411e6a7d50002a5d5c51b'
 
 # TODO messed up UUIDs in FW up to and including v0.0.2.0, so have to check
 # for existence of both old and correct versions of these two
