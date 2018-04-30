@@ -86,6 +86,9 @@ class ScanResult(object):
         """
         return v == self.addr or v == self.name
 
+    def __repr__(self):
+        return 'addr={},name={},rssi={},age={}'.format(self.addr, self.name, self.rssi, self.age)
+
 class ScanResults(object):
     """Collection of results from a BLE device scan.
 
@@ -779,7 +782,7 @@ class SK8(object):
     def _add_characteristic(self, atthandle, value):
         for s in self.services.values():
             if s.start_handle <= atthandle and s.end_handle >= atthandle:
-                logger.debug('add char %02X to service %s' % (atthandle, s.uuid))
+                logger.debug('add char 0x{:02X} to service {}'.format(atthandle, s.uuid))
                 return s.add_characteristic(atthandle, value)
 
     def _add_service(self, start_handle, end_handle, uuid):
@@ -1219,11 +1222,15 @@ class Dongle(BlueGigaCallbacks):
         """
 
         # convert string address into a ScanResult if needed
-        if isinstance(device, str):
-            device = ScanResult(device, fmt_addr_raw(device))
-        elif not isinstance(device, ScanResult):
-            logger.warn('Expected ScanResult, found type {} instead!'.format(type(device)))
-            return (False, None)
+        if not isinstance(device, ScanResult):
+            if isinstance(device, str):
+                device = ScanResult(device, fmt_addr_raw(device))
+            elif isinstance(device, unicode):
+                device = device.encode('ascii')
+                device = ScanResult(device, fmt_addr_raw(device))
+            else:
+                logger.warn('Expected ScanResult, found type {} instead!'.format(type(device)))
+                return (False, None)
 
         logger.debug('Connecting directly to device address'.format(device.addr))
         # TODO check number of active connections and fail if exceeds max
@@ -1538,39 +1545,39 @@ class Dongle(BlueGigaCallbacks):
 
     def ble_rsp_attclient_attribute_write(self, connection, result):
         super(Dongle, self).ble_rsp_attclient_attribute_write(connection, result)
-        logger.debug('Result of attclient_attribute_write on conn %02X = %s' % (connection, RESULT_CODE[result]))
+        logger.debug('Result of attclient_attribute_write on conn 0x{:02X} = {}'.format(connection, RESULT_CODE[result]))
 
     # response to service discovery command
     def ble_rsp_attclient_read_by_group_type(self, connection, result):
         super(Dongle, self).ble_rsp_attclient_read_by_group_type(connection, result)
-        logger.debug('Result of read_by_group_type on conn %02X = %s' % (connection, RESULT_CODE[result]))
+        logger.debug('Result of read_by_group_type on conn 0x{:02X} = {}'.format(connection, RESULT_CODE[result]))
         if result != 0:
             self._set_conn_state(connection, self._STATE_IDLE)
 
     def ble_rsp_gap_end_procedure(self, result):
         super(Dongle, self).ble_rsp_gap_end_procedure(result)
-        logger.debug('Result of gap_end_procedure: %s' % RESULT_CODE[result])
+        logger.debug('Result of gap_end_procedure: {}'.format(RESULT_CODE[result]))
         self._set_state(self._STATE_IDLE)
 
     def ble_rsp_gap_set_mode(self, result):
         super(Dongle, self).ble_rsp_gap_set_mode(result)
-        logger.debug('Result of gap_set_mode: %s' % RESULT_CODE[result])
+        logger.debug('Result of gap_set_mode: {}'.format(RESULT_CODE[result]))
         self._set_state(self._STATE_IDLE)
 
     def ble_rsp_gap_discover(self, result):
         super(Dongle, self).ble_rsp_gap_discover(result)
-        logger.debug('Result of gap_discover: %s' % RESULT_CODE[result])
+        logger.debug('Result of gap_discover: {}'.format(RESULT_CODE[result]))
         self.scan_responses.clear()
         self._set_state(self._STATE_IDLE)
 
     def ble_rsp_connection_update(self, connection, result):
         super(Dongle, self).ble_rsp_connection_update(connection, result)
-        logger.debug('>>> Connection update result: %s' % (RESULT_CODE[result]))
+        logger.debug('>>> Connection update result: {}'.format(RESULT_CODE[result]))
 
     # conn_handle = uint8
     def ble_rsp_gap_connect_direct(self, result, connection_handle):
         super(Dongle, self).ble_rsp_gap_connect_direct(result, connection_handle)
-        logger.debug('Result of gap_connect_direct: %s [%02X]' % (RESULT_CODE[result], connection_handle))
+        logger.debug('Result of gap_connect_direct: {} [0x{:02X}]'.format(RESULT_CODE[result], connection_handle))
         # if result == 0:
         #     self.conn_handles.append(connection_handle)
         #     self._set_state(self._STATE_CONNECTED)
@@ -1580,12 +1587,12 @@ class Dongle(BlueGigaCallbacks):
     def ble_rsp_connection_disconnect(self, connection, result):
         super(Dongle, self).ble_rsp_connection_disconnect(connection, result)
         if result == 0:
-            logger.debug('Disconnect on connection 0x%02X = %s' % (connection, RESULT_CODE[result]))
+            logger.debug('Disconnect on connection 0x{:02X} = {}'.format(connection, RESULT_CODE[result]))
         self._set_conn_state(connection, self._STATE_IDLE)
 
     def ble_rsp_attclient_read_by_type(self, connection, result):
         super(Dongle, self).ble_rsp_attclient_read_by_type(connection, result)
-        logger.debug('Result of read by type: %s [%02X]' % (connection, result))
+        logger.debug('Result of read by type: {} [0x{:02X}]'.format(connection, result))
 
     def ble_rsp_system_get_connections(self, maxconn):
         super(Dongle, self).ble_rsp_system_get_connections(maxconn)
@@ -1617,7 +1624,7 @@ class Dongle(BlueGigaCallbacks):
 
         logger.debug('Received evt_connection_status(conn={}, flags={})'.format(connection, flags))
         if conn_interval == 0 and timeout == 0 and latency == 0:
-            logger.debug('Conn params are zero')
+            logger.debug('Conn params are zero (probably old/leftover connection)')
             return
         self.conn_handles.append(connection)
         self._set_state(self._STATE_CONNECTED)
@@ -1671,11 +1678,11 @@ class Dongle(BlueGigaCallbacks):
     # events produced during service discovery
     def ble_evt_attclient_group_found(self, connection, start, end, uuid):
         super(Dongle, self).ble_evt_attclient_group_found(connection, start, end, uuid)
-        logger.debug('>> Service found [%04X, %04X], UUID = %s' % (start, end, pp_hex(uuid)))
+        logger.debug('>> Service found [{:04X}, {:04X}], UUID = {}'.format(start, end, pp_hex(bytearray(uuid))))
         if connection in self.conn_devices:
             dev = self.conn_devices[connection]
             dev._add_service(start, end, uuid)
-        logger.debug('GROUP: %04X %04X %s' % (start, end, pp_hex(uuid)))
+        logger.debug('GROUP: 0x{:04X} 0x{:04X} {}'.format(start, end, pp_hex(uuid)))
 
     # events produced during descriptor discovery
     def ble_evt_attclient_find_information_found(self, connection, chrhandle, uuid):
@@ -1689,7 +1696,7 @@ class Dongle(BlueGigaCallbacks):
                 current_service = dev.get_service_for_handle(chrhandle)
                 if chrhandle in current_service.chars:
                     current_char = current_service.chars[chrhandle]
-                    logger.debug('Adding desc to char %04X / %s' % (current_char.handle, pp_hex(current_char.value)))
+                    logger.debug('Adding desc to char {:04X} / {}'.format(current_char.handle, pp_hex(current_char.value)))
                     current_char.add_descriptor(chrhandle, uuid, pp_hex(uuid))
                 else:
                     if uuid != RAW_UUID_GATT_CCC:
@@ -1703,6 +1710,7 @@ class Dongle(BlueGigaCallbacks):
         if type == ATTR_VALUE_TYPE_READ_BY_TYPE:
             if connection in self.conn_devices and self.conn_state[connection] == self._STATE_DISCOVER_CHARS:
                 dev = self.conn_devices[connection]
+                value = bytearray(value)
                 char = dev._add_characteristic(atthandle, value)
                 # should also add the descriptor this is linked to
                 char.add_descriptor(char.char_handle, char.raw_uuid, char.uuid)
@@ -1721,7 +1729,6 @@ class Dongle(BlueGigaCallbacks):
                 logger.debug('Read attribute: conn={:02X}, atthandle={:04X}, value={}'.format(connection, atthandle, value))
 
         if type == ATTR_VALUE_TYPE_NOTIFY:
-            # logger.debug('Notify %02X %04X %d bytes' % (connection, atthandle, len(value)))
             if connection in self.conn_devices:
                 timestamp = time.time()
                 device = self.conn_devices[connection]
@@ -1735,16 +1742,9 @@ class Dongle(BlueGigaCallbacks):
                 device.packets += 1
                 self.packets += 1
 
-        # logger.debug('ATTR: HANDLE: %04X' % atthandle),
-        # logger.debug('| TYPE: %02x' % type),
-        # if type == 3: # 3 == read operation
-        #     logger.debug('| VALUE: %s' % pp_hex(value))
-        # else:
-        #     logger.debug('| VALUE: %s' % hexlify(value))
-
     def ble_evt_attclient_procedure_completed(self, connection, result, chrhandle):
         super(Dongle, self).ble_evt_attclient_procedure_completed(connection, result, chrhandle)
-        logger.debug('GATT procedure completed on conn %02X, result %04X, char handle %04X' % (connection, result, chrhandle))
+        logger.debug('GATT procedure completed on conn 0x{:02X}, result 0x{:04X}, char handle 0x{:04X}'.format(connection, result, chrhandle))
         if self.conn_state[connection] == self._STATE_BEGIN_STREAMING and result == 0:
             self._set_conn_state(connection, self._STATE_STREAMING)
         else:
