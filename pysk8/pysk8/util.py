@@ -1,9 +1,10 @@
+import sys
 
 def fmt_addr(addr):
     """ Format a Bluetooth hardware address as a hex string.
     
     Args:
-        addr (bytes): raw Bluetoot address in dongle format.
+        addr (bytes): raw Bluetooth address in dongle format.
 
     Returns:
         str. Address in xx:xx:xx:xx:xx:xx format.
@@ -24,6 +25,10 @@ def fmt_addr_raw(addr, reverse=True):
     raw_addr = [int(addr[i:i+2], 16) for i in range(0, len(addr), 2)]
     if reverse:
         raw_addr.reverse()
+
+    # for Python 2, this needs to be a string instead of a bytearray
+    if sys.version_info[0] == 2:
+        return str(bytearray(raw_addr))
     return bytearray(raw_addr)
 
 def pp_hex(raw, reverse=True):
@@ -37,7 +42,6 @@ def pp_hex(raw, reverse=True):
         Hex string corresponding to input byte sequence.
     """
     if not reverse:
-        return ''.join(['{:02x}'.format(v) for v in raw])
-
-    return ''.join(reversed(['{:02x}'.format(v) for v in raw]))
+        return ''.join(['{:02x}'.format(v) for v in bytearray(raw)])
+    return ''.join(reversed(['{:02x}'.format(v) for v in bytearray(raw)]))
 
