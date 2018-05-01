@@ -610,7 +610,7 @@ class SK8(object):
 
         firmware_version = self.get_characteristic_handle_from_uuid(UUID_FIRMWARE_REVISION)
         if firmware_version is None:
-            logger.warn('Failed to find handle for device name')
+            logger.warn('Failed to find handle for firmware version')
             return None
 
         self.firmware_version = self.dongle._read_attribute(self.conn_handle, firmware_version)
@@ -679,7 +679,7 @@ class SK8(object):
             return True if (self.hardware & EXT_HW_EXTANA) else False
 
         result = self._check_hardware()
-        return True if (result & EXT_HW_EXTANA) else False
+        return True if (result & EXT_HW_EXTANA) != 0 else False
 
     def has_imus(self, cached=True):
         """Can be used to check if an external IMU chain is currently connected.
@@ -696,7 +696,7 @@ class SK8(object):
             return True if (self.hardware & EXT_HW_IMUS) else False
 
         result = self._check_hardware()
-        return True if (result & EXT_HW_IMUS != 0) else False
+        return True if (result & EXT_HW_IMUS) != 0 else False
 
     def pp_services(self):
         """Display (somewhat) pretty-printed dump of service, charactertistic 
@@ -753,7 +753,7 @@ class SK8(object):
                 logger.debug('Found char for UUID: {}'.format(uuid))
                 return char
 
-        logger.warn('Failed to find char for UUID: {}'.format(uuid))
+        logger.info('Failed to find char for UUID: {}'.format(uuid))
         return None
 
     def get_ccc_handle_from_uuid(self, uuid):
@@ -833,7 +833,7 @@ class SK8(object):
         """
         polling_override = self.get_characteristic_handle_from_uuid(UUID_POLLING_OVERRIDE)
         if polling_override is None:
-            logger.warn('Failed to find handle for device name')
+            logger.warn('Failed to find handle for polling override')
             return None
         override_ms = self.dongle._read_attribute(self.conn_handle, polling_override, True)
         return None if override_ms is None else ord(override_ms)
