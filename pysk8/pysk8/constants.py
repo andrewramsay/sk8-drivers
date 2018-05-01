@@ -26,6 +26,7 @@ SENSOR_GYRO                              = 0x02
 SENSOR_MAG                               = 0x04
 SENSOR_ALL                               = SENSOR_ACC | SENSOR_GYRO | SENSOR_MAG
 
+MAX_DEVICE_NAME_LEN                      = 20
 
 UUID_BATTERY_LEVEL                       = '2a19'
 UUID_DEVICE_NAME                         = '2a00'

@@ -564,7 +564,7 @@ class SK8(object):
         """Sets a new BLE device name for this SK8.
 
         Args:
-            new_name (str): the new device name as an ASCII string.
+            new_name (str): the new device name as an ASCII string, max 20 characters.
 
         Returns:
             True if the name was updated successfully, False otherwise.
@@ -573,8 +573,12 @@ class SK8(object):
         device_name = self.get_characteristic_handle_from_uuid(UUID_DEVICE_NAME)
         if device_name is None:
             logger.warn('Failed to find handle for device name')
-            return None
+            return False
         
+        if len(new_name) > MAX_DEVICE_NAME_LEN:
+            logger.error('Device name exceeds maximum length ({} > {})'.format(len(new_name), MAX_DEVICE_NAME_LEN))
+            return False
+
         if self.dongle._write_attribute(self.conn_handle, device_name, new_name.encode('ascii')):
             self.name = new_name
             return True
@@ -825,7 +829,7 @@ class SK8(object):
     def get_polling_override(self):
         """Get the current polling override value in milliseconds. 
 
-        See :method:`set_polling_override` for more information. 
+        See :meth:`set_polling_override` for more information. 
 
         Returns:
             None on error, otherwise the current override period in milliseconds 
