@@ -385,7 +385,7 @@ class SK8(object):
         Returns:
             a 3-tuple (r, g, b) (all unsigned integers) in the range 0-255, or `None` on error.
         """
-        if cached:
+        if cached and self.led_state is not None:
             return self.led_state
 
         extana_led = self.get_characteristic_handle_from_uuid(UUID_EXTANA_LED)
@@ -1130,6 +1130,9 @@ class Dongle(BlueGigaCallbacks):
         :meth:`end_scan` method or the :meth:`reset` method. 
 
         Args:
+            callback (callbable): a callback that will be called for each new device
+                discovered by the scanning process. Will be passed a single argument,
+                a :class:`ScanResult` object.
             interval (int): BLE scan interval, in units of 625us
             window (int): BLE scan window, in units of 625us
 
