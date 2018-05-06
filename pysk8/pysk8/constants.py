@@ -59,10 +59,12 @@ UUIDS_TO_DISCOVER = \
         UUID_HARDWARE_STATE,
     ]
 
-RAW_UUID_GATT_PRIMARY_SERVICE                = b'\x00\x28'
-RAW_UUID_GATT_CHAR_DECL                      = b'\x03\x28'
-RAW_UUID_GATT_CCC                            = b'\x02\x29'
-UUID_GATT_CCC                                = '2902'
+RAW_UUID_GATT_PRIMARY_SERVICE            = b'\x00\x28'
+RAW_UUID_GATT_CHAR_DECL                  = b'\x03\x28'
+RAW_UUID_GATT_CCC                        = b'\x02\x29'
+UUID_GATT_CCC                            = '2902'
+RAW_CCC_NOTIFY_ON                        = b'\x01\x00'
+RAW_CCC_NOTIFY_OFF                       = b'\x00\x00'
 
 # characteristic properties
 PROP_BROADCAST                           = 0x01
