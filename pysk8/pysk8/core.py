@@ -1488,6 +1488,11 @@ class Dongle(BlueGigaCallbacks):
     def _read_attribute(self, conn_handle, att_handle, israw=False):
         self.attr_read = {}
 
+        # prevent any read/write calls being attempted after a disconnect
+        if conn_handle < 0:
+            logger.warn('Attempted read from 0x{:04X} failed, invalid connection handle'.format(att_handle))
+            return False
+
         self._set_conn_state(conn_handle, self._STATE_READ_GATT)
         self.api.ble_cmd_attclient_read_by_handle(conn_handle, att_handle)
         self._wait_for_conn_state(conn_handle, self._STATE_READ_GATT, DEF_TIMEOUT)
@@ -1508,6 +1513,11 @@ class Dongle(BlueGigaCallbacks):
 
     def _write_attribute(self, conn_handle, att_handle, value):
         self.attr_write = {}
+
+        # prevent any read/write calls being attempted after a disconnect
+        if conn_handle < 0:
+            logger.warn('Attempted write to 0x{:04X} failed, invalid connection handle'.format(att_handle))
+            return False
 
         self._set_conn_state(conn_handle, self._STATE_WRITE_GATT)
         self.api.ble_cmd_attclient_attribute_write(conn_handle, att_handle, value)
@@ -1546,12 +1556,8 @@ class Dongle(BlueGigaCallbacks):
         self._write_attribute(dev.conn_handle, sensor_select, struct.pack('B', sensor_state))
         logger.debug('Completed configuring IMUs on device {}'.format(dev.addr))
 
-        self._set_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
-        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_IMU_CCC), b'\x01\x00')
-        self._wait_for_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
-
-        if self.conn_state[dev.conn_handle] != self._STATE_STREAMING:
-            logger.debug('Failed to activate streaming on device {}!'.format(dev.addr))
+        if not self._write_attribute(dev.conn_handle, self.get_ccc_handle_from_uuid(UUID_IMU_CCC), RAW_CCC_NOTIFY_ON):
+            logger.warn('Failed to activate IMU streaming on {} (write failed on 0x{:04X})'.format(dev.addr, self.get_ccc_handle_from_uuid(UUID_IMU_CCC)))
             return False
 
         logger.debug('IMU streaming activated OK on device {}'.format(dev.addr))
@@ -1590,28 +1596,18 @@ class Dongle(BlueGigaCallbacks):
             self._write_attribute(dev.conn_handle, extana_imu_streaming_tmp, struct.pack('B', 1 if include_imu else 0))
 
         # enable ExtAna streaming
-        self._set_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
-        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), b'\x01\x00')
-        self._wait_for_conn_state(dev.conn_handle, self._STATE_BEGIN_STREAMING)
-
-        if self.conn_state[dev.conn_handle] != self._STATE_STREAMING:
-            logger.debug('Failed to activate streaming on device {}!'.format(dev.addr))
+        if not self._write_attribute(dev.conn_handle, self.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), RAW_CCC_NOTIFY_ON):
+            logger.warn('Failed to activate ExtAna streaming on {} (write failed on 0x{:04X})'.format(dev.addr, self.get_ccc_handle_from_uuid(UUID_EXTANA_CCC)))
             return False
 
         logger.debug('SK8-ExtAna streaming activated OK on device {}'.format(dev.addr))
         return True
 
     def _disable_imu_streaming(self, dev):
-        self._set_conn_state(dev.conn_handle, self._STATE_CONFIGURE_IMUS)
-        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_IMU_CCC), b'\x00\x00')
-        self._wait_for_conn_state(dev.conn_handle, self._STATE_CONFIGURE_IMUS)
-        return True
+        return self._write_attribute(dev.conn_handle, self.get_ccc_handle_from_uuid(UUID_IMU_CCC), RAW_CCC_NOTIFY_OFF)
 
     def _disable_extana_streaming(self, dev):
-        self._set_conn_state(dev.conn_handle, self._STATE_CONFIGURE_ANA)
-        self.api.ble_cmd_attclient_attribute_write(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), b'\x00\x00')
-        self._wait_for_conn_state(dev.conn_handle, self._STATE_CONFIGURE_ANA)
-        return True
+        return self._write_attribute(dev.conn_handle, self.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), RAW_CCC_NOTIFY_OFF)
 
     # responses
 
@@ -1817,12 +1813,10 @@ class Dongle(BlueGigaCallbacks):
     def ble_evt_attclient_procedure_completed(self, connection, result, chrhandle):
         super(Dongle, self).ble_evt_attclient_procedure_completed(connection, result, chrhandle)
         logger.debug('GATT procedure completed on conn 0x{:02X}, result 0x{:04X}, char handle 0x{:04X}'.format(connection, result, chrhandle))
-        if self.conn_state[connection] == self._STATE_BEGIN_STREAMING and result == 0:
-            self._set_conn_state(connection, self._STATE_STREAMING)
-        else:
-            if connection in self.conn_devices:
-                self.attr_write[connection] = {}
-                self.attr_write[connection][chrhandle] = result
-                logger.debug('Write attribute: conn={:02X}, chrhandle={:04X}, result={:02X}'.format(connection, chrhandle, result))
-            self._set_conn_state(connection, self._STATE_IDLE)
+
+        if connection in self.conn_devices:
+            self.attr_write[connection] = {}
+            self.attr_write[connection][chrhandle] = result
+            logger.debug('Write attribute: conn={:02X}, chrhandle={:04X}, result={:02X}'.format(connection, chrhandle, result))
+        self._set_conn_state(connection, self._STATE_IDLE)
 
