@@ -1494,7 +1494,11 @@ class Dongle(BlueGigaCallbacks):
             return False
 
         self._set_conn_state(conn_handle, self._STATE_READ_GATT)
-        self.api.ble_cmd_attclient_read_by_handle(conn_handle, att_handle)
+        try:
+            self.api.ble_cmd_attclient_read_by_handle(conn_handle, att_handle)
+        except struct.error as se:
+            logger.warn('Attempted read from 0x{:04X} failed, invalid connection handle'.format(att_handle))
+            return False
         self._wait_for_conn_state(conn_handle, self._STATE_READ_GATT, DEF_TIMEOUT)
 
         if conn_handle not in self.attr_read:
@@ -1520,7 +1524,11 @@ class Dongle(BlueGigaCallbacks):
             return False
 
         self._set_conn_state(conn_handle, self._STATE_WRITE_GATT)
-        self.api.ble_cmd_attclient_attribute_write(conn_handle, att_handle, value)
+        try:
+            self.api.ble_cmd_attclient_attribute_write(conn_handle, att_handle, value)
+        except struct.error as se:
+            logger.warn('Attempted write to 0x{:04X} failed, invalid connection handle'.format(att_handle))
+            return False
         self._wait_for_conn_state(conn_handle, self._STATE_WRITE_GATT, DEF_TIMEOUT)
 
         if conn_handle not in self.attr_write:
@@ -1556,8 +1564,8 @@ class Dongle(BlueGigaCallbacks):
         self._write_attribute(dev.conn_handle, sensor_select, struct.pack('B', sensor_state))
         logger.debug('Completed configuring IMUs on device {}'.format(dev.addr))
 
-        if not self._write_attribute(dev.conn_handle, self.get_ccc_handle_from_uuid(UUID_IMU_CCC), RAW_CCC_NOTIFY_ON):
-            logger.warn('Failed to activate IMU streaming on {} (write failed on 0x{:04X})'.format(dev.addr, self.get_ccc_handle_from_uuid(UUID_IMU_CCC)))
+        if not self._write_attribute(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_IMU_CCC), RAW_CCC_NOTIFY_ON):
+            logger.warn('Failed to activate IMU streaming on {} (write failed on 0x{:04X})'.format(dev.addr, dev.get_ccc_handle_from_uuid(UUID_IMU_CCC)))
             return False
 
         logger.debug('IMU streaming activated OK on device {}'.format(dev.addr))
@@ -1596,18 +1604,18 @@ class Dongle(BlueGigaCallbacks):
             self._write_attribute(dev.conn_handle, extana_imu_streaming_tmp, struct.pack('B', 1 if include_imu else 0))
 
         # enable ExtAna streaming
-        if not self._write_attribute(dev.conn_handle, self.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), RAW_CCC_NOTIFY_ON):
-            logger.warn('Failed to activate ExtAna streaming on {} (write failed on 0x{:04X})'.format(dev.addr, self.get_ccc_handle_from_uuid(UUID_EXTANA_CCC)))
+        if not self._write_attribute(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), RAW_CCC_NOTIFY_ON):
+            logger.warn('Failed to activate ExtAna streaming on {} (write failed on 0x{:04X})'.format(dev.addr, dev.get_ccc_handle_from_uuid(UUID_EXTANA_CCC)))
             return False
 
         logger.debug('SK8-ExtAna streaming activated OK on device {}'.format(dev.addr))
         return True
 
     def _disable_imu_streaming(self, dev):
-        return self._write_attribute(dev.conn_handle, self.get_ccc_handle_from_uuid(UUID_IMU_CCC), RAW_CCC_NOTIFY_OFF)
+        return self._write_attribute(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_IMU_CCC), RAW_CCC_NOTIFY_OFF)
 
     def _disable_extana_streaming(self, dev):
-        return self._write_attribute(dev.conn_handle, self.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), RAW_CCC_NOTIFY_OFF)
+        return self._write_attribute(dev.conn_handle, dev.get_ccc_handle_from_uuid(UUID_EXTANA_CCC), RAW_CCC_NOTIFY_OFF)
 
     # responses
 
