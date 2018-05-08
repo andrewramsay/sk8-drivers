@@ -27,6 +27,7 @@ def basic(port, device_name):
 
         # Get the name and firmware version
         print('Device 0, name={}, firmware={}'.format(sk8.get_device_name(), sk8.get_firmware_version()))
+        print('Battery level: {}%'.format(sk8.get_battery_level()))
 
         # disconnect the device
         sk8.disconnect()
