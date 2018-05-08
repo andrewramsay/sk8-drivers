@@ -1032,6 +1032,9 @@ class Dongle(BlueGigaCallbacks):
         
         Calls :meth:`reset` and then closes the serial port connection to the dongle."""
         logger.debug('closing dongle, {} active connections'.format(len(self.conn_handles)))
+        if self.is_scanning():
+            logger.debug('in scanning mode, calling end_scan')
+            self.end_scan()
         self.reset()
         if self.api is not None:
             self.api.stop_daemon()
@@ -1132,7 +1135,7 @@ class Dongle(BlueGigaCallbacks):
         Args:
             callback (callbable): a callback that will be called for each new device
                 discovered by the scanning process. Will be passed a single argument,
-                a :class:`ScanResult` object.
+                a :class:`ScanResult` object. May be None if not needed.
             interval (int): BLE scan interval, in units of 625us
             window (int): BLE scan window, in units of 625us
 
@@ -1736,7 +1739,7 @@ class Dongle(BlueGigaCallbacks):
             return
 
         if self.scan_responses.update(addr, sender, name, rssi):
-            # returns True if newly discovered device, not one seen already
+            # update() returns True if newly discovered device, not one seen already
             if self.scan_callback is not None:
                 self.scan_callback(self.scan_responses.get_device(addr))
 
