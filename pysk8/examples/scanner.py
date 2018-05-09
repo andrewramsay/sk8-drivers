@@ -5,7 +5,7 @@ from pysk8.core import Dongle
 
 # called each time a new BLE device is discovered. the parameter is a
 # ScanResult object containing information about the device.
-def scan_callback(result):
+def scan_callback(dev):
     print('Found device:')
     # .addr contains address formatted as a string, .raw_addr contains binary data
     print('\tAddress: {}'.format(dev.addr))
@@ -14,8 +14,7 @@ def scan_callback(result):
     # RSSI from BLED112 API
     print('\tRSSI: {}dBm'.format(dev.rssi))
     # "age" of the result object, i.e. how long since it was created
-    print('\tAge: {}s'.format(dev.age()))
-
+    print('\tAge: {:.1f}s'.format(dev.age))
 
 def scanner(port):
     with Dongle() as dongle:
