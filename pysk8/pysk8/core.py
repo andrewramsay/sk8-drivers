@@ -59,7 +59,7 @@ class ScanResult(object):
         self.raw_addr = raw_addr
         self.name = name
         self.rssi = rssi
-        self.age = time.time()
+        self._age = time.time()
 
     def update(self, name, rssi):
         """Update the device name and/or RSSI.
@@ -70,15 +70,16 @@ class ScanResult(object):
         """
         self.name = name
         self.rssi = rssi
-        self.age = time.time()
+        self._age = time.time()
 
+    @property
     def age(self):
         """Returns the "age" of the ScanResult.
         
-        This method simply returns the time (in seconds) since this ScanResult
+        Simply returns the time (in seconds) since this ScanResult
         was created or updated.
         """
-        return time.time() - self.age
+        return time.time() - self._age
 
     def __eq__(self, v):
         """
