@@ -969,6 +969,10 @@ class Dongle(BlueGigaCallbacks):
         time.sleep(0.5) # TODO
         self.get_supported_connections()
         logger.info('Dongle supports {} connections'.format(self.supported_connections))
+        if self.supported_connections == -1:
+            logger.error('Failed to retrieve number of supported connections from the dongle! (try reinserting it)')
+            return False
+        
         self.conn_state = {x: self._STATE_IDLE for x in range(self.supported_connections)}
         self.reset()
 
