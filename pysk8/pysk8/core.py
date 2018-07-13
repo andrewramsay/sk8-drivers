@@ -218,7 +218,7 @@ class SK8(object):
         self.imus = [IMUData(x) for x in range(MAX_IMUS)]
         self.extana_data = ExtAnaData()
         self.enabled_imus = []
-        self.streaming = False
+        self.enabled_sensors = SENSOR_ALL 
         self.packets = 0
         self.services = {}
         self.imu_callback = None
@@ -497,6 +497,7 @@ class SK8(object):
             return False
 
         self.enabled_imus = enabled_imus
+        self.enabled_sensors = enabled_sensors
         return True
 
     def get_enabled_imus(self):
@@ -509,6 +510,17 @@ class SK8(object):
             The list will contain ints from 0-4, up to a maximum of 5 entries, and may be empty if no IMUs are enabled. 
         """
         return self.enabled_imus
+
+    def get_enabled_sensors(self):
+        """Returns the bitmask indicating the currently active set of IMU sensors.
+
+        This method returns a copy of the bitmask of enabled sensors as most recently
+        passed to the :meth:`enable_imu_streaming` method. 
+
+        Returns:
+            A combination of the SENSOR_ constants, e.g. SENSOR_ALL, or SENSOR_ACC | SENSOR_GYRO.
+        """
+        return self.enabled_sensors
 
     def disable_imu_streaming(self):
         """Disable IMU streaming for this device.
@@ -930,6 +942,9 @@ class Dongle(BlueGigaCallbacks):
         self.supported_connections = -1
         self._disconnect_handler = None
         self.ignore_nameless = True
+        self._reconnect_interval = 1.0
+        self._reconnect_attempts = 2
+        self._reconnect_restore_state = True
         self.api = None
         self._clear()
 
@@ -1075,6 +1090,34 @@ class Dongle(BlueGigaCallbacks):
 
         return True
 
+    def set_reconnect_parameters(self, interval, attempts, restore_state=True):
+        """Sets the behaviour of the automatic reconnect feature. 
+
+        When a connected SK8 is disconnected unexpectedly (in other words not by a 
+        user-triggered action), an automatic attempt to reconnect to the device
+        can be made. If successful this will typically resume the connection with
+        an interruption of only a few seconds. 
+
+        This method allows the application to configure some aspects of the automatic
+        reconnect functionality.
+
+        Args:
+            interval (float): time in seconds between successive attempts to reconnect. 
+                Also applies to the delay between the initial disconnection and the first
+                attempt to reconnect.
+            attempts (int): the number of attempts to make to recreate the connection. This
+                can be set to zero in order to disable the reconnection feature.
+            restore_state (bool): if True, the streaming state of the device will also be
+                restored if possible. For example, the IMU configuration will be re-applied
+                after the reconnection attempt succeeds, to return the SK8 to the same
+                state it was in before the disconnection occurred.
+
+        Returns: 
+            None
+        """
+        self._reconnect_attempts = max(0, attempts)
+        self._reconnect_interval = max(0, interval)
+        self._reconnect_restore_state = restore_state  
 
     def get_connection_interval(self):
         """Returns the current BLE connection interval in ms"""
@@ -1263,7 +1306,7 @@ class Dongle(BlueGigaCallbacks):
         for dev in devicelist:
             logger.info('Connecting to {} (name={})...'.format(dev.addr, dev.name))
             self._set_state(self._STATE_CONNECTING)
-            self.api.ble_cmd_gap_connect_direct(dev.raw_addr, 0, 6, 14, 100, 5)
+            self.api.ble_cmd_gap_connect_direct(dev.raw_addr, 0, 6, 14, 100, 50)
             self._wait_for_state(self._STATE_CONNECTING, 5)
 
             if self.state != self._STATE_CONNECTED:
@@ -1317,7 +1360,7 @@ class Dongle(BlueGigaCallbacks):
         self._set_state(self._STATE_CONNECTING)
 
         # TODO parameters here = ???
-        self.api.ble_cmd_gap_connect_direct(device.raw_addr, 0, 6, 14, 100, 5)
+        self.api.ble_cmd_gap_connect_direct(device.raw_addr, 0, 6, 14, 100, 50)
         self._wait_for_state(self._STATE_CONNECTING, 5)
 
         if self.state != self._STATE_CONNECTED:
@@ -1557,6 +1600,45 @@ class Dongle(BlueGigaCallbacks):
     def _set_conn_state(self, c, s):
         self.conn_state[c] = s
 
+    def _reconnect_handler(self, args):
+        dev = args
+        logger.debug('Reconnect: {} / {}'.format(dev.name, dev.addr))
+
+        time.sleep(self._reconnect_interval)
+
+        attempts = 0
+        connected = False
+        while attempts < self._reconnect_attempts and not connected:
+            # TODO stick this code in a method and call it from connect_direct to avoid duplication
+            self._set_state(self._STATE_CONNECTING)
+            self.api.ble_cmd_gap_connect_direct(dev.raw_addr, 0, 6, 14, 100, 50)
+            self._wait_for_state(self._STATE_CONNECTING, 5)
+            if self.state != self._STATE_CONNECTED:
+                logger.warn('Connection failed!')
+                # send end procedure to cancel connection attempt
+                self._set_state(self._STATE_GAP_END)
+                self.api.ble_cmd_gap_end_procedure()
+                self._wait_for_state(self._STATE_GAP_END)
+            else:
+                connected = True
+
+            attempts += 1
+
+        if not connected:
+            logger.warn('Reconnection attempt on "{}" failed!'.format(dev.name))
+            return
+
+        conn_handle = self.conn_handles[-1]
+        logger.info('Connection OK, handle is 0x{:02X}'.format(conn_handle))
+        dev.conn_handle = conn_handle
+
+        if self._reconnect_restore_state:
+            logger.debug('Restoring device state after reconnection')
+            if dev.imu_callback is not None:
+                dev.enable_imu_streaming(dev.get_enabled_imus(), dev.get_enabled_sensors())
+
+        logger.debug('Reconnect completed')
+
     def _enable_imu_streaming(self, dev, imu_state, sensor_state):
 
         imu_select = dev.get_characteristic_handle_from_uuid(UUID_IMU_SELECTION)
@@ -1695,11 +1777,20 @@ class Dongle(BlueGigaCallbacks):
             else:
                 logger.warn('Connection disconnected: {} - {}'.format(reason, RESULT_CODE[reason]))
                 if connection in self.conn_devices:
-                    logger.debug('Calling disconnect on device with handle {}'.format(connection))
-                    self.conn_devices[connection].disconnect()
+                    logger.debug('Dealing with disconnect on device with handle {}'.format(connection))
+                    # TODO this probably isn't necessary here
+                    # self.conn_devices[connection].disconnect()
+
+                    self.conn_handles.remove(connection)
+
                     # this is probably an error, so call the handler if the user has set one
                     if self._disconnect_handler is not None:
                         self._disconnect_handler(self, self.conn_devices[connection], reason, RESULT_CODE[reason])
+
+                    # kick off reconnect attempt if enabled
+                    if self._reconnect_attempts > 0:
+                        logger.info('Attempting to reconnect to device automatically ({})'.format(self.conn_devices[connection].name))
+                        threading.Thread(target=self._reconnect_handler, args=(self.conn_devices[connection], )).start()
                 else:
                     logger.warn('Disconnected orphaned connection {}'.format(connection))
 
