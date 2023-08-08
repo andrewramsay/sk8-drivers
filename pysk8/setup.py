@@ -17,7 +17,7 @@ DESCRIPTION = 'Python driver for SK8 BLE sensor pack'
 URL = 'https://github.com/andrewramsay/sk8-drivers/pysk8'
 EMAIL = 'andrew.ramsay@gmail.com'
 AUTHOR = 'Andrew Ramsay'
-REQUIRES_PYTHON = '>=2.7.0'
+REQUIRES_PYTHON = '>=3.7.0'
 VERSION = None
 
 # What packages are required for this module to be executed?
@@ -114,11 +114,11 @@ setup(
         'License :: OSI Approved :: MIT License',
         
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: Implementation :: CPython',
     ],
     # $ setup.py publish support.
